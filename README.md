@@ -1,40 +1,48 @@
 # Bar Spectrum Analyzer (VST3)
 
-Analizador de espectro de referencia, estilo SPAN pero mostrando la energía
-por banda de frecuencia en **barras** (como un EQ gráfico), pensado para
-insertarlo justo **antes de un compresor** y decidir con más precisión en
-qué bandas y a qué nivel (dB) fijar el umbral.
+*[Leer en español](README.es.md)*
 
-- 28 barras espaciadas logarítmicamente entre 20 Hz y 20 kHz.
-- Medidor con ataque rápido / liberación lenta (comportamiento tipo VU real).
-- Slider "Referencia (dB)" automatizable: dibuja una línea amarilla y pinta
-  de naranja cualquier banda que la supere — así ves de un vistazo qué
-  frecuencias necesitan compresión y cuáles no.
-- No modifica el audio: es solo un medidor, transparente en la señal.
+A reference spectrum analyzer in the spirit of SPAN, but showing energy per
+frequency band as **bars** (like a graphic EQ). It is meant to sit right
+**before a compressor** so you can decide more precisely which bands need
+compression and where to set the threshold.
 
-No puedo compilar el binario .vst3 desde este entorno (se necesita
-Visual Studio + JUCE instalados en Windows), así que te dejo el proyecto
-completo listo para compilar en tu máquina.
+- 28 bars, logarithmically spaced from 20 Hz to 20 kHz.
+- Fast attack / slow release metering, behaving like a real VU meter.
+- Automatable "Reference (dB)" slider: draws a horizontal line and paints
+  any band above it orange, so you can see at a glance which frequencies
+  need compression and which don't.
+- It never touches the audio: it is a meter only, fully transparent to the
+  signal.
 
-## Requisitos
+## Requirements
 
-1. **JUCE**: clona el framework dentro de esta misma carpeta del proyecto:
-   ```
-   git clone https://github.com/juce-framework/JUCE.git
-   ```
-   Debe quedar como `BarSpectrumAnalyzer/JUCE/` (junto a este CMakeLists.txt).
-   Si prefieres tenerlo en otro lugar, edita la línea `add_subdirectory(JUCE)`
-   en `CMakeLists.txt` con la ruta correcta.
+- **Git**
+- **CMake** 3.15 or newer: https://cmake.org/download/
+- **Visual Studio 2022** (or its Build Tools) with the
+  "Desktop development with C++" workload.
 
-2. **CMake** (3.15 o más reciente): https://cmake.org/download/
+JUCE is included as a git submodule, so there is no need to download it
+separately.
 
-3. **Visual Studio 2022** (Windows) con el componente
-   "Desktop development with C++" instalado.
+## Getting the code
 
-## Compilar
+Clone the repository **with its submodules** so JUCE is downloaded too:
 
-Desde la carpeta del proyecto (`BarSpectrumAnalyzer/`), en símbolo de
-sistema o PowerShell:
+```
+git clone --recurse-submodules https://github.com/velivaneski/BarSpectrumAnalyzer.git
+```
+
+If you already cloned without that option and the `JUCE/` folder is empty,
+run this inside the project:
+
+```
+git submodule update --init
+```
+
+## Building
+
+From the project folder, in PowerShell or Command Prompt:
 
 ```
 mkdir build
@@ -43,35 +51,39 @@ cmake .. -G "Visual Studio 17 2022"
 cmake --build . --config Release
 ```
 
-Al terminar, el VST3 queda en:
+The first build takes several minutes because it compiles all of JUCE.
+When it finishes, the plugin is at:
+
 ```
 build/BarSpectrumAnalyzer_artefacts/Release/VST3/Bar Spectrum Analyzer.vst3
 ```
 
-Como el CMakeLists tiene `COPY_PLUGIN_AFTER_BUILD TRUE`, debería copiarse
-automáticamente a la carpeta estándar de VST3 de Windows:
+## Installing
+
+The build tries to copy the plugin automatically to the standard Windows
+VST3 folder:
+
 ```
 C:\Program Files\Common Files\VST3\
 ```
-Si no aparece ahí, cópialo manualmente a esa ruta.
 
-## Usar en FL Studio
+That folder requires administrator rights. If the build ends with a
+`Permission denied` error at that step, the plugin **was** built; just copy
+the `Bar Spectrum Analyzer.vst3` folder to that path by hand (Windows will
+ask for administrator confirmation), or run the build from a terminal
+opened as administrator.
 
-1. Abre FL Studio → **Options → Manage Plugins**.
-2. Pulsa **Find plugins** (o **Find more plugins**) para que lo detecte.
-3. Debería aparecer como **"Bar Spectrum Analyzer"** en la lista de efectos.
-4. Insértalo en el canal del mixer que quieras medir, **justo antes** del
-   slot donde vas a poner tu compresor.
-5. Mueve el slider **"Referencia (dB)"** hasta el nivel al que quieres que
-   el compresor empiece a actuar. Las barras que queden en **naranja**
-   están por encima de ese umbral: son las bandas que realmente necesitan
-   compresión en ese momento. Las que quedan en **verde** están por debajo.
+## Using it in FL Studio
 
-## Ajustes que puedes pedirme después
+1. Open FL Studio → **Options → Manage Plugins**.
+2. Click **Find plugins** so it gets detected.
+3. It shows up as **"Bar Spectrum Analyzer"** in the effects list.
+4. Insert it on the mixer channel you want to measure, **right before** the
+   slot where your compressor goes.
+5. Move the **"Reference (dB)"** slider to the level where you want the
+   compressor to start working. Bars in **orange** are above that
+   threshold: those are the bands that need compression right now. Bars in
+   **green** are below it.
 
-- Cambiar el rango de frecuencias o el número de barras.
-- Añadir modo "peak hold" (que la punta de cada barra se quede marcada
-  unos segundos).
-- Añadir un modo estéreo (mostrar izquierda/derecha por separado).
-- Convertir esto en una herramienta web (HTML) además del VST3, para usarla
-  sin abrir FL Studio.
+> Note: the plugin interface is currently in Spanish (the slider reads
+> "Referencia de compresion"). An English interface is planned.
