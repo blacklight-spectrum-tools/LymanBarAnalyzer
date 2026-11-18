@@ -1,6 +1,9 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "UI/BlacklightLookAndFeel.h"
+#include "UI/SpectrumView.h"
+#include "UI/PhaseView.h"
 
 class BarSpectrumAnalyzerAudioProcessorEditor : public juce::AudioProcessorEditor,
                                                  private juce::Timer
@@ -13,17 +16,23 @@ public:
     void resized() override;
 
 private:
-    void timerCallback() override { repaint(); }
-    juce::String frequencyLabel (float hz) const;
+    void timerCallback() override;
+    void showTab (int index);
 
     BarSpectrumAnalyzerAudioProcessor& audioProcessor;
 
-    juce::Slider referenceSlider;
-    juce::Label  referenceLabel;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> referenceAttachment;
+    // Va primero: los componentes se destruyen antes que su LookAndFeel
+    BlacklightLookAndFeel lookAndFeel;
 
-    static constexpr float minDb = -60.0f;
-    static constexpr float maxDb = 0.0f;
+    juce::TextButton spectrumTab { "Spectrum" };
+    juce::TextButton phaseTab    { "Phase" };
+
+    SpectrumView spectrumView;
+    PhaseView    phaseView;
+
+    int currentTab = 0;
+
+    static constexpr int headerHeight = 44;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BarSpectrumAnalyzerAudioProcessorEditor)
 };

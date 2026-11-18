@@ -2,17 +2,44 @@
 
 *[Read in English](README.md)*
 
-Analizador de espectro de referencia, estilo SPAN pero mostrando la energía
-por banda de frecuencia en **barras** (como un EQ gráfico), pensado para
-insertarlo justo **antes de un compresor** y decidir con más precisión en
-qué bandas y a qué nivel (dB) fijar el umbral.
+Analizador de espectro de referencia que muestra la energía por banda de
+frecuencia en **barras** (como un EQ gráfico), pensado para insertarlo
+justo **antes de un compresor** y ver qué bandas necesitan compresión y
+dónde poner el umbral.
 
+No modifica el audio: es solo un medidor, transparente en la señal.
+
+## Compatibilidad
+
+Plugin VST3 para **Windows**, compatible con cualquier DAW que cargue
+plugins VST3: FL Studio, Ableton Live, Cubase, Studio One, Reaper, Bitwig,
+Cakewalk, Reason 12+ y otros.
+
+Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
+(AAX) y macOS (AU / VST3).
+
+## Funciones
+
+**Pestaña Spectrum**
 - 28 barras espaciadas logarítmicamente entre 20 Hz y 20 kHz.
-- Medidor con ataque rápido / liberación lenta (comportamiento tipo VU real).
-- Slider "Referencia (dB)" automatizable: dibuja una línea amarilla y pinta
-  de naranja cualquier banda que la supere — así ves de un vistazo qué
-  frecuencias necesitan compresión y cuáles no.
-- No modifica el audio: es solo un medidor, transparente en la señal.
+- Línea de referencia de compresión: las barras que la pasan se iluminan y
+  muestran cuántos dB la rebasan (por ejemplo `+3.2`), el dato que
+  necesitas para el umbral.
+- Peak hold en cada barra.
+- Tilt (0 / 3 / 4.5 dB por octava) para juzgar el balance tonal. Usa 0
+  para poner el umbral de un compresor.
+- Medidor de nivel L/R con lecturas de Peak, RMS y LUFS de corto plazo
+  (ITU-R BS.1770), y luz de CLIP que se queda encendida (clic para apagarla).
+
+**Pestaña Phase**
+- Goniómetro con la imagen estéreo.
+- Medidor de correlación de fase de -1 a +1.
+- Luz de advertencia: verde (compatible con mono), amarillo (muy abierto,
+  revisa en mono), rojo (partes de la mezcla se cancelan al sumar a mono).
+- Mínimo y máximo de correlación alcanzados mientras suena, con reinicio.
+
+La ventana se puede redimensionar y recuerda su tamaño y la última pestaña
+abierta.
 
 ## Requisitos
 
@@ -53,8 +80,12 @@ La primera compilación tarda varios minutos porque compila JUCE completo.
 Al terminar, el plugin queda en:
 
 ```
-build/BarSpectrumAnalyzer_artefacts/Release/VST3/Bar Spectrum Analyzer.vst3
+build/BarSpectrumAnalyzer_artefacts/Release/VST3/Bar Spectrum Analyzer Dev.vst3
 ```
+
+La versión en desarrollo se llama **"Bar Spectrum Analyzer Dev"** para que
+pueda convivir con la versión 1.0 sin reemplazarla. La versión 1.0 está
+disponible en el tag de git `v1.0`.
 
 ## Instalar
 
@@ -67,18 +98,18 @@ C:\Program Files\Common Files\VST3\
 
 Esa carpeta requiere permisos de administrador. Si la compilación termina
 con un error `Permission denied` en ese paso, el plugin **sí se compiló**;
-solo copia a mano la carpeta `Bar Spectrum Analyzer.vst3` a esa ruta
-(Windows pedirá confirmar como administrador), o corre la compilación desde
-una terminal abierta como administrador.
+solo copia a mano la carpeta `.vst3` a esa ruta (Windows pedirá confirmar
+como administrador), o corre la compilación desde una terminal abierta como
+administrador.
 
-## Usar en FL Studio
+## Uso
 
-1. Abre FL Studio → **Options → Manage Plugins**.
-2. Pulsa **Find plugins** para que lo detecte.
-3. Aparece como **"Bar Spectrum Analyzer"** en la lista de efectos.
-4. Insértalo en el canal del mixer que quieras medir, **justo antes** del
-   slot donde vas a poner tu compresor.
-5. Mueve el slider **"Referencia (dB)"** hasta el nivel al que quieres que
-   el compresor empiece a actuar. Las barras en **naranja** están por encima
-   de ese umbral: son las bandas que necesitan compresión en ese momento.
-   Las que quedan en **verde** están por debajo.
+1. Vuelve a buscar plugins en tu DAW. En FL Studio: **Options → Manage
+   Plugins → Find plugins**.
+2. Inserta **"Bar Spectrum Analyzer Dev"** en la pista o bus que quieras
+   medir, **justo antes** del slot donde va tu compresor.
+3. Mueve el slider de **referencia de compresión** hasta el nivel donde
+   quieres que el compresor empiece a actuar. Las barras iluminadas están
+   por encima, y el número arriba de cada una te dice por cuánto.
+4. Abre la pestaña **Phase** para revisar el ancho estéreo y la
+   compatibilidad con mono.

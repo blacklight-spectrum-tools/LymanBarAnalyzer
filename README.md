@@ -2,18 +2,42 @@
 
 *[Leer en español](README.es.md)*
 
-A reference spectrum analyzer in the spirit of SPAN, but showing energy per
-frequency band as **bars** (like a graphic EQ). It is meant to sit right
-**before a compressor** so you can decide more precisely which bands need
-compression and where to set the threshold.
+A reference spectrum analyzer that shows energy per frequency band as
+**bars** (like a graphic EQ), built to sit right **before a compressor** so
+you can see which bands need compression and where to set the threshold.
 
+It never touches the audio: it is a meter only, fully transparent to the
+signal.
+
+## Compatibility
+
+VST3 plugin for **Windows**, compatible with any DAW that loads VST3
+plugins: FL Studio, Ableton Live, Cubase, Studio One, Reaper, Bitwig,
+Cakewalk, Reason 12+ and others.
+
+Tested so far in FL Studio. Pro Tools (AAX) and macOS (AU / VST3) builds
+are planned.
+
+## Features
+
+**Spectrum tab**
 - 28 bars, logarithmically spaced from 20 Hz to 20 kHz.
-- Fast attack / slow release metering, behaving like a real VU meter.
-- Automatable "Reference (dB)" slider: draws a horizontal line and paints
-  any band above it orange, so you can see at a glance which frequencies
-  need compression and which don't.
-- It never touches the audio: it is a meter only, fully transparent to the
-  signal.
+- Compression reference line: bars above it light up and show by how many
+  dB they exceed it (e.g. `+3.2`), the number you need for the threshold.
+- Peak hold on every bar.
+- Tilt (0 / 3 / 4.5 dB per octave) to judge tonal balance. Use 0 when
+  setting a compressor threshold.
+- L/R level meter with Peak, RMS and short-term LUFS (ITU-R BS.1770)
+  readouts, plus a latching CLIP light (click to reset).
+
+**Phase tab**
+- Goniometer showing the stereo image.
+- Phase correlation meter from -1 to +1.
+- Warning light: green (mono-safe), yellow (very wide, check in mono),
+  red (parts of the mix cancel out when summed to mono).
+- Minimum / maximum correlation reached while playing, with reset.
+
+The window is resizable and remembers its size and last open tab.
 
 ## Requirements
 
@@ -55,8 +79,12 @@ The first build takes several minutes because it compiles all of JUCE.
 When it finishes, the plugin is at:
 
 ```
-build/BarSpectrumAnalyzer_artefacts/Release/VST3/Bar Spectrum Analyzer.vst3
+build/BarSpectrumAnalyzer_artefacts/Release/VST3/Bar Spectrum Analyzer Dev.vst3
 ```
+
+The current development build is named **"Bar Spectrum Analyzer Dev"** so
+it can live next to version 1.0 without replacing it. Version 1.0 is
+available under the `v1.0` git tag.
 
 ## Installing
 
@@ -69,21 +97,16 @@ C:\Program Files\Common Files\VST3\
 
 That folder requires administrator rights. If the build ends with a
 `Permission denied` error at that step, the plugin **was** built; just copy
-the `Bar Spectrum Analyzer.vst3` folder to that path by hand (Windows will
-ask for administrator confirmation), or run the build from a terminal
-opened as administrator.
+the `.vst3` folder to that path by hand (Windows will ask for administrator
+confirmation), or run the build from a terminal opened as administrator.
 
-## Using it in FL Studio
+## Using it
 
-1. Open FL Studio → **Options → Manage Plugins**.
-2. Click **Find plugins** so it gets detected.
-3. It shows up as **"Bar Spectrum Analyzer"** in the effects list.
-4. Insert it on the mixer channel you want to measure, **right before** the
-   slot where your compressor goes.
-5. Move the **"Reference (dB)"** slider to the level where you want the
-   compressor to start working. Bars in **orange** are above that
-   threshold: those are the bands that need compression right now. Bars in
-   **green** are below it.
-
-> Note: the plugin interface is currently in Spanish (the slider reads
-> "Referencia de compresion"). An English interface is planned.
+1. Rescan plugins in your DAW. In FL Studio: **Options → Manage Plugins →
+   Find plugins**.
+2. Insert **"Bar Spectrum Analyzer Dev"** on the track or bus you want to
+   measure, **right before** the slot where your compressor goes.
+3. Move the **compression reference** slider to the level where you want
+   the compressor to start working. Highlighted bars are above it, and the
+   number on top tells you by how much.
+4. Open the **Phase** tab to check stereo width and mono compatibility.
