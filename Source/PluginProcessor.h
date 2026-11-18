@@ -1,0 +1,71 @@
+#pragma once
+#include <JuceHeader.h>
+#include <array>
+
+/**
+    Analizador de espectro de referencia en BARRAS (estilo SPAN pero
+    con niveles por banda en vez de curva continua).
+
+    No modifica el audio: solo lo mide. Pensado para insertarse justo
+    ANTES de un compresor, para decidir con más precisión en qué
+    bandas de frecuencia y a qué nivel (dB) fijar el umbral.
+*/
+class BarSpectrumAnalyzerAudioProcessor : public juce::AudioProcessor
+{
+public:
+    static constexpr int fftOrder = 11;              // tamaño de FFT = 2048 muestras
+    static constexpr int fftSize  = 1 << fftOrder;
+    static constexpr int numBars  = 28;              // cantidad de barras mostradas
+
+    BarSpectrumAnalyzerAudioProcessor();
+    ~BarSpectrumAnalyzerAudioProcessor() override;
+
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override {}
+    bool isBusesLayoutSupported (const BusesLayout&) const override { return true; }
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    const juce::String getName() const override { return "Bar Spectrum Analyzer"; }
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    double getTailLengthSeconds() const override { return 0.0; }
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock&) override;
+    void setStateInformation (const void*, int) override;
+
+    // --- Acceso para el editor (interfaz gráfica) ---
+    float getBarLevelDb (int barIndex) const { return barLevels[(size_t) barIndex].load(); }
+    float getBandFrequency (int edgeIndex) const { return bandEdgesHz[(size_t) edgeIndex]; }
+
+    juce::AudioProcessorValueTreeState apvts;
+
+private:
+    void pushSampleForFFT (float sample);
+    void computeBarsFromSpectrum();
+
+    juce::dsp::FFT fft;
+    juce::dsp::WindowingFunction<float> window;
+
+    std::array<float, fftSize>     fifo {};
+    std::array<float, fftSize * 2> fftData {};
+    int  fifoIndex  = 0;
+    bool blockReady = false;
+
+    std::array<float, numBars + 1>       bandEdgesHz {};   // límites de cada banda en Hz
+    std::array<std::atomic<float>, numBars> barLevels;     // nivel suavizado en dB por barra
+
+    double currentSampleRate = 44100.0;
+
+    static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BarSpectrumAnalyzerAudioProcessor)
+};

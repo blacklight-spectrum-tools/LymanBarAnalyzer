@@ -1,0 +1,28 @@
+# Salida de compilacion (se regenera con CMake)
+build/
+cmake-build-*/
+out/
+
+# Binarios compilados (se distribuyen por GitHub Releases, no en el codigo)
+*.vst3
+*.dll
+*.exe
+*.lib
+*.exp
+*.obj
+*.pdb
+*.ilk
+
+# Editores / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Modelos pesados de IA (se descargan aparte, no se versionan)
+Resources/models/*.onnx
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
