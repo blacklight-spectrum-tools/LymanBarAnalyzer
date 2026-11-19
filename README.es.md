@@ -68,7 +68,7 @@ JUCE viene incluido como submódulo de git, no hace falta descargarlo aparte.
 Clona el repositorio **con sus submódulos** para que baje JUCE:
 
 ```
-git clone --recurse-submodules https://github.com/blacklight-spectrum-tools/BarSpectrumAnalyzer.git
+git clone --recurse-submodules https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer.git
 ```
 
 Si ya lo clonaste sin esa opción y la carpeta `JUCE/` está vacía, corre
