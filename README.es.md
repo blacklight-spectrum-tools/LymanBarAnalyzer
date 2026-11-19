@@ -9,6 +9,10 @@ dónde poner el umbral.
 
 No modifica el audio: es solo un medidor, transparente en la señal.
 
+![Pestaña Spectrum en vista M/S: barras Mid en morado, Side en cian y medidor de nivel a la derecha](docs/images/spectrum.png)
+
+![Pestaña Phase: goniómetro, correlación de fase, revisión de graves en mono y balance L/R](docs/images/phase.png)
+
 ## Compatibilidad
 
 Plugin VST3 para **Windows**, compatible con cualquier DAW que cargue

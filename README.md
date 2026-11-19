@@ -9,6 +9,10 @@ you can see which bands need compression and where to set the threshold.
 It never touches the audio: it is a meter only, fully transparent to the
 signal.
 
+![Spectrum tab in M/S view: Mid bars in purple, Side in cyan, level meter on the right](docs/images/spectrum.png)
+
+![Phase tab: goniometer, phase correlation, low end mono check and L/R balance](docs/images/phase.png)
+
 ## Compatibility
 
 VST3 plugin for **Windows**, compatible with any DAW that loads VST3
