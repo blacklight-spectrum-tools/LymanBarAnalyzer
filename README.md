@@ -66,7 +66,7 @@ separately.
 Clone the repository **with its submodules** so JUCE is downloaded too:
 
 ```
-git clone --recurse-submodules https://github.com/velivaneski/BarSpectrumAnalyzer.git
+git clone --recurse-submodules https://github.com/blacklight-spectrum-tools/BarSpectrumAnalyzer.git
 ```
 
 If you already cloned without that option and the `JUCE/` folder is empty,
