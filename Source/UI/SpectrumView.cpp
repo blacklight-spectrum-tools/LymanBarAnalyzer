@@ -6,6 +6,7 @@ namespace
 {
     constexpr float tiltSlopes[] = { 0.0f, 3.0f, 4.5f };   // dB por octava, pivote 1 kHz
     const char* const tiltNames[] = { "0", "3 dB", "4.5 dB" };
+    const char* const viewNames[] = { "Sum", "M/S" };
 
     constexpr double holdMs          = 1000.0;   // peak hold: tiempo quieto
     constexpr float  holdFallDbPerS  = 15.0f;    // y luego cae a esta velocidad
@@ -44,13 +45,7 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
     {
         auto& b = tiltButtons[(size_t) i];
         b.setButtonText (tiltNames[i]);
-        b.setClickingTogglesState (false);
-        b.setColour (juce::TextButton::buttonColourId,   Palette::background);
-        b.setColour (juce::TextButton::buttonOnColourId, Palette::panel);
-        b.setColour (juce::TextButton::textColourOffId,  Palette::textDim);
-        b.setColour (juce::TextButton::textColourOnId,   Palette::barOver);
-        b.setConnectedEdges ((i > 0 ? juce::Button::ConnectedOnLeft : 0)
-                           | (i < 2 ? juce::Button::ConnectedOnRight : 0));
+        styleSegment (b, i, 3);
         b.onClick = [this, i] { if (tiltAttachment != nullptr) tiltAttachment->setValueAsCompleteGesture ((float) i); };
         addAndMakeVisible (b);
     }
@@ -61,6 +56,46 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
             *tiltParam, [this] (float v) { setTiltButtons ((int) std::round (v)); });
         tiltAttachment->sendInitialUpdate();
     }
+
+    // Vista: Sum (solo Mid, como siempre) o M/S (Mid + Side superpuestos)
+    viewLabel.setText ("VIEW", juce::dontSendNotification);
+    viewLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    viewLabel.setColour (juce::Label::textColourId, Palette::textDim);
+    viewLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (viewLabel);
+
+    for (int i = 0; i < 2; ++i)
+    {
+        auto& b = viewButtons[(size_t) i];
+        b.setButtonText (viewNames[i]);
+        styleSegment (b, i, 2);
+        b.onClick = [this, i] { if (viewAttachment != nullptr) viewAttachment->setValueAsCompleteGesture ((float) i); };
+        addAndMakeVisible (b);
+    }
+
+    if (auto* viewParam = audioProcessor.apvts.getParameter ("view"))
+    {
+        viewAttachment = std::make_unique<juce::ParameterAttachment> (
+            *viewParam, [this] (float v) { setViewButtons ((int) std::round (v)); });
+        viewAttachment->sendInitialUpdate();
+    }
+}
+
+void SpectrumView::styleSegment (juce::TextButton& b, int index, int count)
+{
+    b.setClickingTogglesState (false);
+    b.setColour (juce::TextButton::buttonColourId,   Palette::background);
+    b.setColour (juce::TextButton::buttonOnColourId, Palette::panel);
+    b.setColour (juce::TextButton::textColourOffId,  Palette::textDim);
+    b.setColour (juce::TextButton::textColourOnId,   Palette::barOver);
+    b.setConnectedEdges ((index > 0 ? juce::Button::ConnectedOnLeft : 0)
+                       | (index < count - 1 ? juce::Button::ConnectedOnRight : 0));
+}
+
+void SpectrumView::setViewButtons (int index)
+{
+    for (int i = 0; i < 2; ++i)
+        viewButtons[(size_t) i].setToggleState (i == index, juce::dontSendNotification);
 }
 
 SpectrumView::~SpectrumView() = default;
@@ -94,10 +129,14 @@ void SpectrumView::resized()
 
     area.removeFromTop (8);
     auto row2 = area.removeFromTop (26);
-    tiltLabel.setBounds (row2.removeFromLeft (40));
+    tiltLabel.setBounds (row2.removeFromLeft (36));
     for (auto& b : tiltButtons)
-        b.setBounds (row2.removeFromLeft (64));
-    row2.removeFromLeft (16);
+        b.setBounds (row2.removeFromLeft (56));
+    row2.removeFromLeft (14);
+    viewLabel.setBounds (row2.removeFromLeft (40));
+    for (auto& b : viewButtons)
+        b.setBounds (row2.removeFromLeft (52));
+    row2.removeFromLeft (14);
     readoutArea = row2.toFloat();
 
     area.removeFromTop (14);
@@ -139,6 +178,7 @@ void SpectrumView::paint (juce::Graphics& g)
     const float refDb = audioProcessor.apvts.getRawParameterValue ("referenceDb")->load();
     const int   tiltIndex = juce::jlimit (0, 2, (int) std::round (audioProcessor.apvts.getRawParameterValue ("tilt")->load()));
     const float tilt = tiltSlopes[tiltIndex];
+    const bool  showSide = audioProcessor.apvts.getRawParameterValue ("view")->load() > 0.5f;
 
     auto dbToY = [&] (float db)
     {
@@ -166,7 +206,7 @@ void SpectrumView::paint (juce::Graphics& g)
     }
 
     // Barras, peak hold y dB por encima de la referencia
-    const bool compactNumbers = barWidth < 16.0f;
+    const bool compactNumbers = barWidth < 21.0f;
 
     for (int i = 0; i < numBars; ++i)
     {
@@ -181,6 +221,18 @@ void SpectrumView::paint (juce::Graphics& g)
         g.setColour (over ? Palette::barOver : Palette::barNormal);
         g.fillRoundedRectangle (juce::Rectangle<float> (x, top, barWidth, plot.getBottom() - top),
                                 juce::jmin (2.0f, barWidth * 0.25f));
+
+        // Si el tilt empuja una banda con sonido real por debajo de la grafica,
+        // una flechita lo indica: "aqui hay sonido, solo que queda abajo".
+        if (db < minDb && audioProcessor.getBarLevelDb (i) > -80.0f)
+        {
+            const float cx = x + barWidth * 0.5f, by = plot.getBottom() - 3.0f;
+            const float hw = juce::jmin (5.0f, barWidth * 0.35f);
+            juce::Path arrow;
+            arrow.addTriangle (cx - hw, by - hw, cx + hw, by - hw, cx, by);
+            g.setColour (Palette::barNormal);
+            g.fillPath (arrow);
+        }
 
         // Peak hold: se queda quieto 1 s y luego baja
         auto& hold = holdDb[(size_t) i];
@@ -198,6 +250,22 @@ void SpectrumView::paint (juce::Graphics& g)
         {
             g.setColour (Palette::text.withAlpha (0.9f));
             g.fillRect (x, dbToY (hold) - 1.0f, barWidth, 2.0f);
+        }
+
+        // Vista M/S: el canal Side como barra angosta cian encima de la Mid
+        if (showSide)
+        {
+            const float sideDb  = audioProcessor.getSideLevelDb (i) + tilt * std::log2 (centreHz / 1000.0f);
+            const float sideTop = dbToY (sideDb);
+            const float sideW   = juce::jmax (2.0f, barWidth * 0.5f);
+
+            if (sideDb > minDb)
+            {
+                g.setColour (Palette::side.withAlpha (0.9f));
+                g.fillRoundedRectangle (juce::Rectangle<float> (x + (barWidth - sideW) * 0.5f, sideTop,
+                                                                sideW, plot.getBottom() - sideTop),
+                                        juce::jmin (2.0f, sideW * 0.25f));
+            }
         }
 
         // Cuantos dB pasa la referencia (el dato para el threshold del compresor)
@@ -244,6 +312,19 @@ void SpectrumView::paint (juce::Graphics& g)
     // Linea horizontal de referencia (umbral objetivo de compresion)
     g.setColour (Palette::referenceLine);
     g.drawHorizontalLine ((int) dbToY (refDb), plot.getX(), plot.getRight());
+
+    // Leyenda de la vista M/S
+    if (showSide)
+    {
+        auto legend = juce::Rectangle<float> (plot.getRight() - 118.0f, plot.getY() + 6.0f, 118.0f, 14.0f);
+        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        g.setColour (Palette::barNormal);
+        g.fillRect (legend.getX(), legend.getCentreY() - 4.0f, 8.0f, 8.0f);
+        g.drawText ("MID", legend.withTrimmedLeft (12.0f).withWidth (40.0f), juce::Justification::centredLeft);
+        g.setColour (Palette::side);
+        g.fillRect (legend.getX() + 56.0f, legend.getCentreY() - 4.0f, 8.0f, 8.0f);
+        g.drawText ("SIDE", legend.withTrimmedLeft (68.0f), juce::Justification::centredLeft);
+    }
 
     drawLevelMeter (g);
     drawReadouts (g);
@@ -323,10 +404,16 @@ void SpectrumView::drawReadouts (juce::Graphics& g)
                            { "RMS",    formatDb (rms) },
                            { "LUFS S", formatDb (lufs) } };
 
-    // Lecturas alineadas a la derecha: etiqueta tenue + valor
+    // Lecturas alineadas a la derecha: etiqueta tenue + valor.
+    // Si la ventana es angosta se omite RMS (Peak y LUFS son los esenciales).
     auto area = readoutArea;
+    const bool roomForAll = area.getWidth() >= 300.0f;
+
     for (int i = 2; i >= 0; --i)
     {
+        if (i == 1 && ! roomForAll)
+            continue;
+
         auto slot = area.removeFromRight (i == 2 ? 104.0f : 86.0f);
         auto valueBox = slot.removeFromRight (46.0f);
 

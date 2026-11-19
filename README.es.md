@@ -30,13 +30,21 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
   para poner el umbral de un compresor.
 - Medidor de nivel L/R con lecturas de Peak, RMS y LUFS de corto plazo
   (ITU-R BS.1770), y luz de CLIP que se queda encendida (clic para apagarla).
+- Vista Sum o M/S: en M/S el canal Side se dibuja en cian sobre cada barra,
+  para ver qué frecuencias están abiertas y cuáles en el centro.
 
 **Pestaña Phase**
-- Goniómetro con la imagen estéreo.
+- Goniómetro con la imagen estéreo, con escala Auto (la figura llena el
+  círculo) o Level (la distancia al centro es el nivel real; el borde es
+  0 dBFS).
 - Medidor de correlación de fase de -1 a +1.
 - Luz de advertencia: verde (compatible con mono), amarillo (muy abierto,
   revisa en mono), rojo (partes de la mezcla se cancelan al sumar a mono).
 - Mínimo y máximo de correlación alcanzados mientras suena, con reinicio.
+- Revisión de graves: correlación de todo lo que está por debajo de 120 Hz,
+  con su propia luz (Mono / Slightly wide / Stereo bass). Te dice si lo
+  ancho está en el grave, donde estorba, o solo en los agudos.
+- Medidor de balance L/R: muestra si la mezcla se carga hacia un lado.
 
 La ventana se puede redimensionar y recuerda su tamaño y la última pestaña
 abierta.

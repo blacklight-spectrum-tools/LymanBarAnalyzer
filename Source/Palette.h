@@ -13,6 +13,10 @@ namespace Palette
     const juce::Colour text          { 0xffC9BED5 };  // textos y etiquetas
     const juce::Colour textDim       { 0xff937CAA };  // textos secundarios
 
+    // Canal Side (lo que esta a los lados en estereo). Cian "fluorescente",
+    // como lo que brilla bajo luz negra: contrasta con los morados sin chocar.
+    const juce::Colour side          { 0xff67E8F9 };
+
     // Colores de estado (luz de fase). Van fuera de la paleta a proposito:
     // un aviso tiene que distinguirse a simple vista del resto de la interfaz.
     // Siempre se acompanan de un texto, para no depender solo del color.

@@ -29,13 +29,21 @@ are planned.
   setting a compressor threshold.
 - L/R level meter with Peak, RMS and short-term LUFS (ITU-R BS.1770)
   readouts, plus a latching CLIP light (click to reset).
+- Sum or M/S view: in M/S the Side channel is drawn in cyan over each bar,
+  so you can see which frequencies are wide and which sit in the center.
 
 **Phase tab**
-- Goniometer showing the stereo image.
+- Goniometer showing the stereo image, with Auto scale (the shape fills the
+  circle) or Level scale (distance from the center is the real level,
+  the edge is 0 dBFS).
 - Phase correlation meter from -1 to +1.
 - Warning light: green (mono-safe), yellow (very wide, check in mono),
   red (parts of the mix cancel out when summed to mono).
 - Minimum / maximum correlation reached while playing, with reset.
+- Low end check: correlation of everything below 120 Hz, with its own
+  light (Mono / Slightly wide / Stereo bass). Tells you whether the width
+  is in the bass, where it hurts, or only in the highs.
+- L/R balance meter: shows if the mix leans to one side over time.
 
 The window is resizable and remembers its size and last open tab.
 

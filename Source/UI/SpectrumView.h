@@ -25,6 +25,8 @@ private:
     static juce::String frequencyLabel (float hz);
     static juce::String formatDb (float db);
     void setTiltButtons (int index);
+    void setViewButtons (int index);
+    static void styleSegment (juce::TextButton&, int index, int count);
 
     void drawReadouts (juce::Graphics&);
     void drawLevelMeter (juce::Graphics&);
@@ -38,6 +40,10 @@ private:
     juce::Label tiltLabel;
     std::array<juce::TextButton, 3> tiltButtons;
     std::unique_ptr<juce::ParameterAttachment> tiltAttachment;
+
+    juce::Label viewLabel;
+    std::array<juce::TextButton, 2> viewButtons;
+    std::unique_ptr<juce::ParameterAttachment> viewAttachment;
 
     // Zonas calculadas en resized()
     juce::Rectangle<float> plotArea, readoutArea, meterArea, clipArea;

@@ -4,6 +4,7 @@
 #include <atomic>
 #include "Analysis/PhaseAnalyzer.h"
 #include "Analysis/LevelMeter.h"
+#include "Analysis/StereoAnalyzer.h"
 
 /**
     Analizador de espectro de referencia en BARRAS (estilo SPAN pero
@@ -47,10 +48,12 @@ public:
     void setStateInformation (const void*, int) override;
 
     // --- Acceso para la interfaz ---
-    float getBarLevelDb (int barIndex) const { return barLevels[(size_t) barIndex].load(); }
+    float getBarLevelDb (int barIndex) const  { return barLevels[(size_t) barIndex].load(); }
+    float getSideLevelDb (int barIndex) const { return sideLevels[(size_t) barIndex].load(); }
     float getBandFrequency (int edgeIndex) const { return bandEdgesHz[(size_t) edgeIndex]; }
     PhaseAnalyzer& getPhaseAnalyzer() noexcept { return phaseAnalyzer; }
     LevelMeter&    getLevelMeter() noexcept    { return levelMeter; }
+    StereoAnalyzer& getStereoAnalyzer() noexcept { return stereoAnalyzer; }
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -58,22 +61,29 @@ public:
     std::atomic<int> lastTab { 0 };
 
 private:
-    void pushSampleForFFT (float sample);
-    void computeBarsFromSpectrum();
+    struct SpectrumChannel
+    {
+        std::array<float, fftSize>     fifo {};
+        std::array<float, fftSize * 2> data {};
+    };
+
+    void pushSamplesForFFT (float mid, float side);
+    void computeBars (std::array<float, fftSize * 2>& data, std::array<std::atomic<float>, numBars>& levels);
 
     juce::dsp::FFT fft;
     juce::dsp::WindowingFunction<float> window;
 
-    std::array<float, fftSize>     fifo {};
-    std::array<float, fftSize * 2> fftData {};
+    SpectrumChannel midChannel, sideChannel;   // Mid = (L+R)/2, Side = (L-R)/2
     int  fifoIndex  = 0;
     bool blockReady = false;
 
     std::array<float, numBars + 1>          bandEdgesHz {};   // limites de cada banda en Hz
-    std::array<std::atomic<float>, numBars> barLevels;        // nivel suavizado en dB por barra
+    std::array<std::atomic<float>, numBars> barLevels;        // nivel suavizado en dB por barra (Mid)
+    std::array<std::atomic<float>, numBars> sideLevels;       // lo mismo para el canal Side
 
     PhaseAnalyzer phaseAnalyzer;
     LevelMeter    levelMeter;
+    StereoAnalyzer stereoAnalyzer;
 
     double currentSampleRate = 44100.0;
 

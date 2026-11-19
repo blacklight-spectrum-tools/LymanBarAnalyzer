@@ -11,6 +11,8 @@ BarSpectrumAnalyzerAudioProcessor::BarSpectrumAnalyzerAudioProcessor()
 {
     for (auto& b : barLevels)
         b.store (-100.0f);
+    for (auto& b : sideLevels)
+        b.store (-100.0f);
 
     // Bordes de banda espaciados logaritmicamente entre 20 Hz y 20 kHz,
     // igual que un analizador de espectro musical (no lineal).
@@ -36,6 +38,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout BarSpectrumAnalyzerAudioProc
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "tilt", 1 }, "Tilt",
         juce::StringArray { "0 dB/oct", "3 dB/oct", "4.5 dB/oct" }, 0));
+
+    // Vista: suma (Mid) o Mid/Side superpuestos
+    params.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "view", 1 }, "View",
+        juce::StringArray { "Sum", "M/S" }, 0));
     return { params.begin(), params.end() };
 }
 
@@ -44,30 +51,38 @@ void BarSpectrumAnalyzerAudioProcessor::prepareToPlay (double sampleRate, int)
     currentSampleRate = sampleRate;
     fifoIndex  = 0;
     blockReady = false;
-    std::fill (fifo.begin(), fifo.end(), 0.0f);
+    midChannel.fifo.fill (0.0f);
+    sideChannel.fifo.fill (0.0f);
     phaseAnalyzer.prepare (sampleRate);
+    stereoAnalyzer.prepare (sampleRate);
     levelMeter.prepare (sampleRate);
 }
 
-void BarSpectrumAnalyzerAudioProcessor::pushSampleForFFT (float sample)
+void BarSpectrumAnalyzerAudioProcessor::pushSamplesForFFT (float mid, float side)
 {
     if (fifoIndex == fftSize)
     {
         if (! blockReady)
         {
-            std::fill (fftData.begin(), fftData.end(), 0.0f);
-            std::copy (fifo.begin(), fifo.end(), fftData.begin());
+            for (auto* ch : { &midChannel, &sideChannel })
+            {
+                std::fill (ch->data.begin(), ch->data.end(), 0.0f);
+                std::copy (ch->fifo.begin(), ch->fifo.end(), ch->data.begin());
+            }
             blockReady = true;
         }
         fifoIndex = 0;
     }
-    fifo[(size_t) fifoIndex++] = sample;
+    midChannel.fifo[(size_t) fifoIndex]  = mid;
+    sideChannel.fifo[(size_t) fifoIndex] = side;
+    ++fifoIndex;
 }
 
-void BarSpectrumAnalyzerAudioProcessor::computeBarsFromSpectrum()
+void BarSpectrumAnalyzerAudioProcessor::computeBars (std::array<float, fftSize * 2>& data,
+                                                     std::array<std::atomic<float>, numBars>& levels)
 {
-    window.multiplyWithWindowingTable (fftData.data(), fftSize);
-    fft.performFrequencyOnlyForwardTransform (fftData.data());
+    window.multiplyWithWindowingTable (data.data(), fftSize);
+    fft.performFrequencyOnlyForwardTransform (data.data());
 
     const double binWidth = currentSampleRate / (double) fftSize;
 
@@ -86,14 +101,14 @@ void BarSpectrumAnalyzerAudioProcessor::computeBarsFromSpectrum()
 
         float peak = 0.0f;
         for (int bin = loBin; bin < hiBin && bin < fftSize / 2; ++bin)
-            peak = juce::jmax (peak, fftData[(size_t) bin]);
+            peak = juce::jmax (peak, data[(size_t) bin]);
 
         float db = juce::Decibels::gainToDecibels (peak / (float) fftSize, -100.0f);
 
-        float prev   = barLevels[(size_t) barIdx].load();
+        float prev   = levels[(size_t) barIdx].load();
         float coeff  = (db > prev) ? attack : release;
         float smooth = prev + coeff * (db - prev);
-        barLevels[(size_t) barIdx].store (smooth);
+        levels[(size_t) barIdx].store (smooth);
     }
 }
 
@@ -106,26 +121,22 @@ void BarSpectrumAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& 
     if (numCh == 0)
         return;
 
-    for (int s = 0; s < numSamples; ++s)
-    {
-        float mono = 0.0f;
-        for (int ch = 0; ch < numCh; ++ch)
-            mono += buffer.getReadPointer (ch)[s];
-        mono /= (float) numCh;
+    // Con una sola entrada (mono) L y R son el mismo canal.
+    const float* left  = buffer.getReadPointer (0);
+    const float* right = buffer.getReadPointer (numCh > 1 ? 1 : 0);
 
-        pushSampleForFFT (mono);
-    }
+    for (int s = 0; s < numSamples; ++s)
+        pushSamplesForFFT (0.5f * (left[s] + right[s]), 0.5f * (left[s] - right[s]));
 
     if (blockReady)
     {
-        computeBarsFromSpectrum();
+        computeBars (midChannel.data, barLevels);
+        computeBars (sideChannel.data, sideLevels);
         blockReady = false;
     }
 
-    // Fase estereo: con una sola entrada (mono) L y R son el mismo canal.
-    const float* left  = buffer.getReadPointer (0);
-    const float* right = buffer.getReadPointer (numCh > 1 ? 1 : 0);
     phaseAnalyzer.process (left, right, numSamples);
+    stereoAnalyzer.process (left, right, numSamples);
 
     levelMeter.process (buffer.getArrayOfReadPointers(), numCh, numSamples);
 

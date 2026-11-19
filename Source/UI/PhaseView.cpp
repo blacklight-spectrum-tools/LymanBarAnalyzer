@@ -2,32 +2,81 @@
 #include "../PluginProcessor.h"
 #include "../Palette.h"
 
+namespace
+{
+    const juce::Identifier gonioScaleId { "gonioScale" };   // 0 = Auto, 1 = Level
+    constexpr float levelRangeDb = 48.0f;                   // escala Level: centro = -48 dB, borde = 0 dBFS
+    constexpr float balanceRangeDb = 6.0f;                  // el medidor de balance va de -6 a +6 dB
+}
+
 PhaseView::PhaseView (BarSpectrumAnalyzerAudioProcessor& p)
-    : phase (p.getPhaseAnalyzer()),
+    : apvts (p.apvts),
+      phase (p.getPhaseAnalyzer()),
+      stereo (p.getStereoAnalyzer()),
       bufL ((size_t) scopePoints, 0.0f),
       bufR ((size_t) scopePoints, 0.0f)
 {
     resetButton.onClick = [this] { phase.requestReset(); };
     addAndMakeVisible (resetButton);
+
+    // Escala del goniometro: AUTO (la figura llena el circulo) o LEVEL
+    // (la distancia al centro muestra el nivel real; el borde es 0 dBFS)
+    const char* const names[] = { "AUTO", "LEVEL" };
+    for (int i = 0; i < 2; ++i)
+    {
+        auto& b = scaleButtons[(size_t) i];
+        b.setButtonText (names[i]);
+        b.setColour (juce::TextButton::buttonColourId,   Palette::background);
+        b.setColour (juce::TextButton::buttonOnColourId, Palette::panel);
+        b.setColour (juce::TextButton::textColourOffId,  Palette::textDim);
+        b.setColour (juce::TextButton::textColourOnId,   Palette::barOver);
+        b.setConnectedEdges (i == 0 ? juce::Button::ConnectedOnRight : juce::Button::ConnectedOnLeft);
+        b.onClick = [this, i] { setScaleMode (i); };
+        addAndMakeVisible (b);
+    }
+
+    setScaleMode (getScaleMode());
 }
 
 PhaseView::~PhaseView() = default;
+
+int PhaseView::getScaleMode() const
+{
+    return juce::jlimit (0, 1, (int) apvts.state.getProperty (gonioScaleId, 0));
+}
+
+void PhaseView::setScaleMode (int mode)
+{
+    apvts.state.setProperty (gonioScaleId, mode, nullptr);
+    for (int i = 0; i < 2; ++i)
+        scaleButtons[(size_t) i].setToggleState (i == mode, juce::dontSendNotification);
+    repaint();
+}
 
 void PhaseView::resized()
 {
     auto area = getLocalBounds().reduced (20, 16).toFloat();
 
-    // Goniometro: cuadrado a la izquierda (deja 22 px arriba para la etiqueta "M")
-    const float labelSpace = 22.0f;
-    const float side = juce::jmin (area.getHeight() - labelSpace, area.getWidth() * 0.55f);
-    scopeArea = area.removeFromLeft (side).withTrimmedTop (labelSpace)
-                                          .withSizeKeepingCentre (side, side);
-    area.removeFromLeft (32.0f);
+    // Columna izquierda: etiqueta "M" arriba, goniometro, y el switch de escala abajo
+    const float labelSpace = 22.0f, switchSpace = 32.0f;
+    const float side = juce::jmin (area.getHeight() - labelSpace - switchSpace, area.getWidth() * 0.55f);
+    auto left = area.removeFromLeft (side);
+    scopeArea = left.withTrimmedTop (labelSpace).withHeight (side);
 
-    // Columna derecha: ancho maximo de 560 px y centrada en vertical con el
-    // goniometro, para que en ventanas grandes no quede pegada arriba.
-    const float columnHeight = 272.0f + 90.0f;   // controles + texto de ayuda
+    auto switchRow = juce::Rectangle<float> (scopeArea.getX(), scopeArea.getBottom() + 8.0f, 120.0f, 24.0f);
+    scaleButtons[0].setBounds (switchRow.removeFromLeft (60.0f).toNearestInt());
+    scaleButtons[1].setBounds (switchRow.toNearestInt());
+
+    area.removeFromLeft (32.0f);
     area = area.withWidth (juce::jmin (area.getWidth(), 560.0f));
+
+    // Columna derecha: correlacion, graves en mono y balance L/R.
+    // Altura fija de los bloques; el texto de ayuda solo si sobra espacio.
+    const float blocksHeight = 204.0f + 64.0f + 68.0f;
+    const float hintHeight   = 64.0f;
+    const bool  showHint     = area.getHeight() >= blocksHeight + 16.0f + hintHeight;
+    const float columnHeight = blocksHeight + (showHint ? 16.0f + hintHeight : 0.0f);
+
     if (area.getHeight() > columnHeight)
     {
         const float top = juce::jlimit (area.getY(), area.getBottom() - columnHeight,
@@ -35,20 +84,39 @@ void PhaseView::resized()
         area = area.withTop (top).withHeight (columnHeight);
     }
 
-    titleArea  = area.removeFromTop (20.0f);
-    area.removeFromTop (10.0f);
-    valueArea  = area.removeFromTop (40.0f);
+    titleArea  = area.removeFromTop (18.0f);
     area.removeFromTop (6.0f);
-    meterArea  = area.removeFromTop (26.0f);
-    ticksArea  = area.removeFromTop (18.0f);
-    area.removeFromTop (22.0f);
-    statusArea = area.removeFromTop (30.0f);
+    valueArea  = area.removeFromTop (36.0f);
+    area.removeFromTop (4.0f);
+    meterArea  = area.removeFromTop (24.0f);
+    ticksArea  = area.removeFromTop (16.0f);
+    area.removeFromTop (10.0f);
+    statusArea = area.removeFromTop (26.0f);
+    area.removeFromTop (8.0f);
+    holdArea   = area.removeFromTop (20.0f);
+    area.removeFromTop (8.0f);
+    resetButton.setBounds (area.removeFromTop (28.0f).withWidth (150.0f).toNearestInt());
+
+    area.removeFromTop (18.0f);
+    lowTitleArea  = area.removeFromTop (16.0f);
+    area.removeFromTop (4.0f);
+    lowStatusArea = area.removeFromTop (26.0f);
+
     area.removeFromTop (16.0f);
-    holdArea   = area.removeFromTop (22.0f);
-    area.removeFromTop (12.0f);
-    resetButton.setBounds (area.removeFromTop (30.0f).withWidth (150.0f).toNearestInt());
-    area.removeFromTop (20.0f);
-    hintArea   = area;
+    balTitleArea  = area.removeFromTop (16.0f);
+    area.removeFromTop (6.0f);
+    balMeterArea  = area.removeFromTop (16.0f);
+    balTicksArea  = area.removeFromTop (14.0f);
+
+    if (showHint)
+    {
+        area.removeFromTop (16.0f);
+        hintArea = area.removeFromTop (hintHeight);
+    }
+    else
+    {
+        hintArea = {};
+    }
 }
 
 float PhaseView::meterX (float correlation) const
@@ -65,6 +133,18 @@ juce::Colour PhaseView::colourFor (PhaseAnalyzer::Status s)
         case PhaseAnalyzer::Status::warn:     return Palette::warn;
         case PhaseAnalyzer::Status::danger:   return Palette::danger;
         case PhaseAnalyzer::Status::noSignal: break;
+    }
+    return Palette::idle;
+}
+
+juce::Colour PhaseView::colourFor (StereoAnalyzer::Status s)
+{
+    switch (s)
+    {
+        case StereoAnalyzer::Status::ok:       return Palette::ok;
+        case StereoAnalyzer::Status::warn:     return Palette::warn;
+        case StereoAnalyzer::Status::danger:   return Palette::danger;
+        case StereoAnalyzer::Status::noSignal: break;
     }
     return Palette::idle;
 }
@@ -101,31 +181,51 @@ void PhaseView::paint (juce::Graphics& g)
     g.drawText ("STEREO PHASE CORRELATION", titleArea, juce::Justification::centredLeft);
 
     g.setColour (signal ? Palette::text : Palette::idle);
-    g.setFont (juce::FontOptions (34.0f, juce::Font::bold));
+    g.setFont (juce::FontOptions (32.0f, juce::Font::bold));
     g.drawText (signal ? formatCorrelation (corr) : juce::String ("--"),
                 valueArea, juce::Justification::centredLeft);
 
     drawCorrelationMeter (g, corr, signal);
-    drawStatus (g, status);
+    drawLed (g, statusArea, colourFor (status), textFor (status), status != PhaseAnalyzer::Status::noSignal, 16.0f);
     drawHold (g);
+    drawLowEnd (g);
+    drawBalance (g);
 
-    g.setColour (Palette::textDim);
-    g.setFont (juce::FontOptions (12.0f));
-    g.drawFittedText ("Green: mono-safe.\n"
-                      "Yellow: very wide, check how it sounds in mono.\n"
-                      "Red: parts of the mix cancel out when summed to mono.\n"
-                      "Min / max keep the extremes reached while playing.",
-                      hintArea.toNearestInt(), juce::Justification::topLeft, 6);
+    if (! hintArea.isEmpty())
+    {
+        g.setColour (Palette::textDim);
+        g.setFont (juce::FontOptions (11.5f));
+        g.drawFittedText ("Green: mono-safe.  Yellow: very wide, check in mono.\n"
+                          "Red: parts of the mix cancel out when summed to mono.\n"
+                          "Low end should stay mono. Min / max keep the extremes.",
+                          hintArea.toNearestInt(), juce::Justification::topLeft, 4);
+    }
 }
 
 void PhaseView::drawGoniometer (juce::Graphics& g)
 {
     const auto  centre = scopeArea.getCentre();
     const float radius = scopeArea.getWidth() * 0.5f - 4.0f;
+    const bool  levelMode = getScaleMode() == 1;
 
     // Fondo y guias: circulo, eje M (vertical), eje S (horizontal), diagonales L/R
     g.setColour (Palette::panel.withAlpha (0.5f));
     g.fillEllipse (scopeArea.reduced (4.0f));
+
+    // En modo LEVEL, anillos cada 12 dB (borde = 0 dBFS)
+    if (levelMode)
+    {
+        g.setFont (juce::FontOptions (10.0f));
+        for (int db = -12; db > -(int) levelRangeDb; db -= 12)
+        {
+            const float rr = radius * (1.0f + (float) db / levelRangeDb);
+            g.setColour (Palette::grid.withAlpha (0.45f));
+            g.drawEllipse (centre.x - rr, centre.y - rr, rr * 2.0f, rr * 2.0f, 1.0f);
+            g.setColour (Palette::textDim.withAlpha (0.8f));
+            g.drawText (juce::String (db), juce::Rectangle<float> (centre.x + 3.0f, centre.y - rr, 28.0f, 12.0f),
+                        juce::Justification::centredLeft);
+        }
+    }
 
     g.setColour (Palette::grid);
     g.drawEllipse (scopeArea.reduced (4.0f), 1.5f);
@@ -146,8 +246,23 @@ void PhaseView::drawGoniometer (juce::Graphics& g)
     g.drawText ("R", juce::Rectangle<float> (centre.x + d + 6.0f, centre.y - d - 22.0f, 16.0f, 16.0f),
                 juce::Justification::centred);
 
+    // Persistencia ("fosforo"): los puntos se dibujan en una imagen que se
+    // desvanece en ~0.5 s, asi la figura no parpadea en los huecos entre notas.
+    const int imgW = juce::roundToInt (scopeArea.getWidth()), imgH = juce::roundToInt (scopeArea.getHeight());
+    if (! trail.isValid() || trail.getWidth() != imgW || trail.getHeight() != imgH || trailMode != (int) levelMode)
+    {
+        trail = juce::Image (juce::Image::ARGB, juce::jmax (1, imgW), juce::jmax (1, imgH), true);
+        trailMode = (int) levelMode;
+    }
+
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    const float  dt  = lastTrailMs > 0.0 ? (float) juce::jmin (0.25, (now - lastTrailMs) / 1000.0) : 0.0f;
+    lastTrailMs = now;
+    trail.multiplyAllAlphas (std::pow (0.05f, dt / 0.5f));    // queda 5 % despues de 0.5 s
+
     if (! phase.isSignalPresent())
     {
+        trail.clear (trail.getBounds());
         g.setColour (Palette::idle);
         g.setFont (juce::FontOptions (14.0f));
         g.drawText ("No signal", scopeArea, juce::Justification::centred);
@@ -156,33 +271,68 @@ void PhaseView::drawGoniometer (juce::Graphics& g)
 
     phase.copyScope (bufL.data(), bufR.data(), scopePoints);
 
-    // Rotacion de 45 grados: mono (L = R) dibuja una linea vertical,
-    // fase invertida (L = -R) una horizontal.
     float peak = 0.0f;
     for (int i = 0; i < scopePoints; ++i)
     {
         const float l = bufL[(size_t) i], r = bufR[(size_t) i];
-        const float side = (r - l) * 0.7071f;
-        const float mid  = (l + r) * 0.7071f;
-        peak = juce::jmax (peak, std::sqrt (side * side + mid * mid));
+        peak = juce::jmax (peak, std::abs (l), std::abs (r));
     }
 
-    // Ganancia automatica: la figura llena el circulo sin importar el volumen
-    const float target = juce::jlimit (0.5f, 200.0f, 0.9f / juce::jmax (peak, 1.0e-4f));
-    displayGain += (target < displayGain ? 0.5f : 0.05f) * (target - displayGain);
-
-    g.setColour (Palette::barOver.withAlpha (0.55f));
-    for (int i = 0; i < scopePoints; ++i)
+    // En un hueco entre notas no hay nada nuevo que dibujar: la imagen solo se
+    // desvanece y la ganancia automatica se queda quieta (no se dispara).
+    if (peak > 1.0e-3f)
     {
-        const float l = bufL[(size_t) i], r = bufR[(size_t) i];
-        float x = (r - l) * 0.7071f * displayGain;
-        float y = (l + r) * 0.7071f * displayGain;
+        juce::Graphics tg (trail);
+        tg.setColour (Palette::barOver.withAlpha (0.55f));
+        const float cx = (float) imgW * 0.5f, cy = (float) imgH * 0.5f;
 
-        const float len = std::sqrt (x * x + y * y);
-        if (len > 1.0f) { x /= len; y /= len; }
+        if (levelMode)
+        {
+            // Distancia al centro en escala logaritmica: borde = 0 dBFS, centro = -48 dB
+            for (int i = 0; i < scopePoints; ++i)
+            {
+                const float l = bufL[(size_t) i], r = bufR[(size_t) i];
+                const float sx = (r - l) * 0.5f, my = (l + r) * 0.5f;
+                const float len = std::sqrt (sx * sx + my * my);
+                if (len < 1.0e-6f)
+                    continue;
 
-        g.fillRect (centre.x + x * radius - 0.75f, centre.y - y * radius - 0.75f, 1.5f, 1.5f);
+                const float db = juce::Decibels::gainToDecibels (len, -levelRangeDb);
+                const float rr = juce::jlimit (0.0f, 1.0f, 1.0f + db / levelRangeDb);
+                tg.fillRect (cx + sx / len * rr * radius - 0.75f, cy - my / len * rr * radius - 0.75f, 1.5f, 1.5f);
+            }
+        }
+        else
+        {
+            // Rotacion de 45 grados: mono (L = R) dibuja una linea vertical,
+            // fase invertida (L = -R) una horizontal.
+            float figure = 0.0f;
+            for (int i = 0; i < scopePoints; ++i)
+            {
+                const float l = bufL[(size_t) i], r = bufR[(size_t) i];
+                const float sx = (r - l) * 0.7071f, my = (l + r) * 0.7071f;
+                figure = juce::jmax (figure, std::sqrt (sx * sx + my * my));
+            }
+
+            // Ganancia automatica: la figura llena el circulo sin importar el volumen
+            const float target = juce::jlimit (0.5f, 200.0f, 0.9f / juce::jmax (figure, 1.0e-4f));
+            displayGain += (target < displayGain ? 0.5f : 0.05f) * (target - displayGain);
+
+            for (int i = 0; i < scopePoints; ++i)
+            {
+                const float l = bufL[(size_t) i], r = bufR[(size_t) i];
+                float x = (r - l) * 0.7071f * displayGain;
+                float y = (l + r) * 0.7071f * displayGain;
+
+                const float len = std::sqrt (x * x + y * y);
+                if (len > 1.0f) { x /= len; y /= len; }
+
+                tg.fillRect (cx + x * radius - 0.75f, cy - y * radius - 0.75f, 1.5f, 1.5f);
+            }
+        }
     }
+
+    g.drawImageAt (trail, juce::roundToInt (scopeArea.getX()), juce::roundToInt (scopeArea.getY()));
 }
 
 void PhaseView::drawCorrelationMeter (juce::Graphics& g, float correlation, bool signal)
@@ -239,27 +389,24 @@ void PhaseView::drawCorrelationMeter (juce::Graphics& g, float correlation, bool
                 juce::Justification::centredRight);
 }
 
-void PhaseView::drawStatus (juce::Graphics& g, PhaseAnalyzer::Status status)
+void PhaseView::drawLed (juce::Graphics& g, juce::Rectangle<float> row, juce::Colour colour,
+                         const juce::String& text, bool lit, float textSize)
 {
-    const auto colour = colourFor (status);
-    const float ledSize = 18.0f;
-    auto led = juce::Rectangle<float> (statusArea.getX(), statusArea.getCentreY() - ledSize * 0.5f,
-                                       ledSize, ledSize);
+    const float ledSize = textSize + 2.0f;
+    auto led = juce::Rectangle<float> (row.getX(), row.getCentreY() - ledSize * 0.5f, ledSize, ledSize);
 
     // Halo de la luz, para que se note encendida
-    if (status != PhaseAnalyzer::Status::noSignal)
+    if (lit)
     {
         g.setColour (colour.withAlpha (0.25f));
-        g.fillEllipse (led.expanded (6.0f));
+        g.fillEllipse (led.expanded (5.0f));
     }
 
     g.setColour (colour);
     g.fillEllipse (led);
 
-    g.setFont (juce::FontOptions (16.0f, juce::Font::bold));
-    g.drawText (textFor (status),
-                statusArea.withTrimmedLeft (ledSize + 14.0f),
-                juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (textSize, juce::Font::bold));
+    g.drawText (text, row.withTrimmedLeft (ledSize + 12.0f), juce::Justification::centredLeft);
 }
 
 void PhaseView::drawHold (juce::Graphics& g)
@@ -285,4 +432,76 @@ void PhaseView::drawHold (juce::Graphics& g)
 
     g.setColour (colourFor (PhaseAnalyzer::statusFor (mx, true)));
     g.drawText ("Max  " + formatCorrelation (mx), area, juce::Justification::centredLeft);
+}
+
+void PhaseView::drawLowEnd (juce::Graphics& g)
+{
+    const bool  present = stereo.hasLowSignal();
+    const float corr    = stereo.getLowCorrelation();
+    const auto  status  = StereoAnalyzer::lowStatusFor (corr, present);
+
+    g.setFont (juce::FontOptions (11.5f, juce::Font::bold));
+    g.setColour (Palette::textDim);
+    g.drawText ("LOW END  < 120 Hz", lowTitleArea, juce::Justification::centredLeft);
+    g.setColour (present ? Palette::text : Palette::idle);
+    g.drawText (present ? formatCorrelation (corr) : juce::String ("--"), lowTitleArea, juce::Justification::centredRight);
+
+    juce::String text = "No low end";
+    if (status == StereoAnalyzer::Status::ok)     text = "Mono";
+    if (status == StereoAnalyzer::Status::warn)   text = "Slightly wide";
+    if (status == StereoAnalyzer::Status::danger) text = "Stereo bass - make it mono";
+
+    drawLed (g, lowStatusArea, colourFor (status), text, present, 14.0f);
+}
+
+void PhaseView::drawBalance (juce::Graphics& g)
+{
+    const bool  present = stereo.hasBalanceSignal();
+    const float db      = stereo.getBalanceDb();
+    const auto  status  = StereoAnalyzer::balanceStatusFor (db, present);
+
+    juce::String value = "--";
+    if (present)
+        value = std::abs (db) < 0.1f ? juce::String ("Centred")
+                                     : (db > 0.0f ? "R +" : "L +") + juce::String (std::abs (db), 1) + " dB";
+
+    g.setFont (juce::FontOptions (11.5f, juce::Font::bold));
+    g.setColour (Palette::textDim);
+    g.drawText ("L/R BALANCE", balTitleArea, juce::Justification::centredLeft);
+    g.setColour (colourFor (status));
+    g.drawText (value, balTitleArea, juce::Justification::centredRight);
+
+    // Medidor de -6 a +6 dB con zonas simetricas (verde al centro)
+    auto toX = [&] (float v)
+    {
+        return juce::jmap (juce::jlimit (-balanceRangeDb, balanceRangeDb, v), -balanceRangeDb, balanceRangeDb,
+                           balMeterArea.getX(), balMeterArea.getRight());
+    };
+
+    const float y = balMeterArea.getY(), h = balMeterArea.getHeight();
+    g.setColour (Palette::danger.withAlpha (0.2f));
+    g.fillRect (balMeterArea);
+    g.setColour (Palette::warn.withAlpha (0.22f));
+    g.fillRect (toX (-StereoAnalyzer::balanceLeaningDb), y,
+                toX (StereoAnalyzer::balanceLeaningDb) - toX (-StereoAnalyzer::balanceLeaningDb), h);
+    g.setColour (Palette::ok.withAlpha (0.25f));
+    g.fillRect (toX (-StereoAnalyzer::balanceCentredDb), y,
+                toX (StereoAnalyzer::balanceCentredDb) - toX (-StereoAnalyzer::balanceCentredDb), h);
+
+    g.setColour (Palette::grid);
+    g.drawRect (balMeterArea, 1.0f);
+    g.drawVerticalLine ((int) toX (0.0f), y, y + h);
+
+    if (present)
+    {
+        g.setColour (Palette::text);
+        g.fillRect (toX (db) - 2.0f, y - 2.0f, 4.0f, h + 4.0f);
+    }
+
+    g.setColour (Palette::textDim);
+    g.setFont (juce::FontOptions (11.0f));
+    g.drawText ("L", balTicksArea.withWidth (20.0f), juce::Justification::centredLeft);
+    g.drawText ("0", juce::Rectangle<float> (toX (0.0f) - 10.0f, balTicksArea.getY(), 20.0f, balTicksArea.getHeight()),
+                juce::Justification::centred);
+    g.drawText ("R", balTicksArea.withTrimmedLeft (balTicksArea.getWidth() - 20.0f), juce::Justification::centredRight);
 }
