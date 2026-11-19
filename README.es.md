@@ -3,9 +3,8 @@
 *[Read in English](README.md)*
 
 Analizador de espectro de referencia que muestra la energía por banda de
-frecuencia en **barras** (como un EQ gráfico), pensado para insertarlo
-justo **antes de un compresor** y ver qué bandas necesitan compresión y
-dónde poner el umbral.
+frecuencia en **barras** (como un EQ gráfico), para ver qué bandas
+sobresalen y por cuánto, y decidir qué comprimir o ecualizar.
 
 No modifica el audio: es solo un medidor, transparente en la señal.
 
@@ -119,7 +118,10 @@ administrador.
 1. Vuelve a buscar plugins en tu DAW. En FL Studio: **Options → Manage
    Plugins → Find plugins**.
 2. Inserta **"Bar Spectrum Analyzer Dev"** en la pista o bus que quieras
-   medir, **justo antes** del slot donde va tu compresor.
+   medir. Muestra la señal tal como está en ese punto de la cadena: en el
+   último slot ves lo que el canal realmente manda; antes de un compresor
+   ves lo que el compresor recibe. También puedes usar dos instancias, una
+   antes y otra después de un plugin, para comparar.
 3. Mueve el slider de **referencia de compresión** hasta el nivel donde
    quieres que el compresor empiece a actuar. Las barras iluminadas están
    por encima, y el número arriba de cada una te dice por cuánto.

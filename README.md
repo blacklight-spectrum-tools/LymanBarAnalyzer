@@ -3,8 +3,8 @@
 *[Leer en español](README.es.md)*
 
 A reference spectrum analyzer that shows energy per frequency band as
-**bars** (like a graphic EQ), built to sit right **before a compressor** so
-you can see which bands need compression and where to set the threshold.
+**bars** (like a graphic EQ), so you can see which bands stand out and by how
+much, and decide what to compress or EQ.
 
 It never touches the audio: it is a meter only, fully transparent to the
 signal.
@@ -117,7 +117,10 @@ confirmation), or run the build from a terminal opened as administrator.
 1. Rescan plugins in your DAW. In FL Studio: **Options → Manage Plugins →
    Find plugins**.
 2. Insert **"Bar Spectrum Analyzer Dev"** on the track or bus you want to
-   measure, **right before** the slot where your compressor goes.
+   measure. It shows the signal exactly as it is at that point of the chain:
+   in the last slot you see what the channel really sends out; before a
+   compressor you see what the compressor receives. You can also use two
+   instances, one before and one after a plugin, to compare.
 3. Move the **compression reference** slider to the level where you want
    the compressor to start working. Highlighted bars are above it, and the
    number on top tells you by how much.
