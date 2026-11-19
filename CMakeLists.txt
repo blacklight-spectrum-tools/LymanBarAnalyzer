@@ -7,22 +7,26 @@ project(BarSpectrumAnalyzer VERSION 1.2.0)
 # --------------------------------------------------------------------------
 add_subdirectory(JUCE)
 
-# Version de desarrollo: PRODUCT_NAME y PLUGIN_CODE distintos a la v1.0 para
-# que FL Studio vea las dos como plugins separados y puedan convivir mientras
-# se prueba. Al lanzar la version final se fijan el nombre del producto, la
-# marca (COMPANY_NAME) y el PLUGIN_MANUFACTURER_CODE definitivos.
+# Identidad definitiva del plugin. NO cambiar PLUGIN_MANUFACTURER_CODE ni
+# PLUGIN_CODE despues de distribuirlo: los DAWs guardan esos codigos en los
+# proyectos y, si cambian, el plugin ya no se encuentra.
+#   Blkt = Blacklight Spectrum Tools (el mismo en todos los plugins de la marca)
+#   Lymn = Lyman Bar Analyzer
+# Codigos anteriores (siguen instalables en paralelo): v1.0 = Tudo/Bspa,
+# version de desarrollo "Bar Spectrum Analyzer Dev" = Tudo/Bsdv.
 juce_add_plugin(BarSpectrumAnalyzer
-    COMPANY_NAME "TuEstudio"
+    COMPANY_NAME "Blacklight Spectrum Tools"
+    BUNDLE_ID com.blacklightspectrumtools.lymanbaranalyzer
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD TRUE
-    PLUGIN_MANUFACTURER_CODE Tudo
-    PLUGIN_CODE Bsdv
+    PLUGIN_MANUFACTURER_CODE Blkt
+    PLUGIN_CODE Lymn
     FORMATS VST3
-    PRODUCT_NAME "Bar Spectrum Analyzer Dev")
+    PRODUCT_NAME "Lyman Bar Analyzer")
 
 juce_generate_juce_header(BarSpectrumAnalyzer)
 

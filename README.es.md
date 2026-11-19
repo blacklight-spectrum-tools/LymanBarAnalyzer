@@ -1,4 +1,6 @@
-# Bar Spectrum Analyzer (VST3)
+# Lyman Bar Analyzer (VST3)
+
+**by Blacklight Spectrum Tools**
 
 *[Read in English](README.md)*
 
@@ -91,12 +93,13 @@ La primera compilación tarda varios minutos porque compila JUCE completo.
 Al terminar, el plugin queda en:
 
 ```
-build/BarSpectrumAnalyzer_artefacts/Release/VST3/Bar Spectrum Analyzer Dev.vst3
+build/BarSpectrumAnalyzer_artefacts/Release/VST3/Lyman Bar Analyzer.vst3
 ```
 
-La versión en desarrollo se llama **"Bar Spectrum Analyzer Dev"** para que
-pueda convivir con la versión 1.0 sin reemplazarla. La versión 1.0 está
-disponible en el tag de git `v1.0`.
+Las versiones anteriores (la 1.0 y "Bar Spectrum Analyzer Dev") usan otros
+identificadores de plugin, así que pueden seguir instaladas junto a Lyman y
+tus proyectos viejos las siguen encontrando. La versión 1.0 está disponible
+en el tag de git `v1.0`.
 
 ## Instalar
 
@@ -117,7 +120,7 @@ administrador.
 
 1. Vuelve a buscar plugins en tu DAW. En FL Studio: **Options → Manage
    Plugins → Find plugins**.
-2. Inserta **"Bar Spectrum Analyzer Dev"** en la pista o bus que quieras
+2. Inserta **"Lyman Bar Analyzer"** en la pista o bus que quieras
    medir. Muestra la señal tal como está en ese punto de la cadena: en el
    último slot ves lo que el canal realmente manda; antes de un compresor
    ves lo que el compresor recibe. También puedes usar dos instancias, una
