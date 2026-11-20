@@ -16,13 +16,14 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
     : AudioProcessorEditor (&p),
       audioProcessor (p),
       spectrumView (p),
-      phaseView (p)
+      phaseView (p),
+      masterView (p)
 {
     setLookAndFeel (&lookAndFeel);
 
     // Pestanas: botones que se comportan como grupo de radio
     int index = 0;
-    for (auto* tab : { &spectrumTab, &phaseTab })
+    for (auto* tab : { &spectrumTab, &phaseTab, &masterTab })
     {
         tab->setClickingTogglesState (true);
         tab->setRadioGroupId (1001);
@@ -37,8 +38,9 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
 
     addChildComponent (spectrumView);
     addChildComponent (phaseView);
+    addChildComponent (masterView);
 
-    showTab (juce::jlimit (0, 1, audioProcessor.lastTab.load()));
+    showTab (juce::jlimit (0, 2, audioProcessor.lastTab.load()));
 
     // Ventana redimensionable (esquina inferior derecha o desde el DAW).
     // El tamano se guarda con el proyecto y se recupera al reabrir.
@@ -50,6 +52,7 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
     setResizeLimits (minWidth, minHeight, maxWidth, maxHeight);
     setSize (w, h);
 
+    dcShown = audioProcessor.getLevelMeter().getDcOffset() > LevelMeter::dcWarnLevel;
     startTimerHz (30);
 }
 
@@ -66,16 +69,27 @@ void BarSpectrumAnalyzerAudioProcessorEditor::showTab (int index)
 
     spectrumTab.setToggleState (index == 0, juce::dontSendNotification);
     phaseTab.setToggleState    (index == 1, juce::dontSendNotification);
+    masterTab.setToggleState   (index == 2, juce::dontSendNotification);
 
     spectrumView.setVisible (index == 0);
     phaseView.setVisible    (index == 1);
+    masterView.setVisible   (index == 2);
 }
 
 void BarSpectrumAnalyzerAudioProcessorEditor::timerCallback()
 {
     // Solo se redibuja la pestana visible
-    if (currentTab == 0) spectrumView.repaint();
-    else                 phaseView.repaint();
+    if (currentTab == 0)      spectrumView.repaint();
+    else if (currentTab == 1) phaseView.repaint();
+    else                      masterView.repaint();
+
+    // Aviso de DC offset en la cabecera (visible en cualquier pestana)
+    const bool dc = audioProcessor.getLevelMeter().getDcOffset() > LevelMeter::dcWarnLevel;
+    if (dc != dcShown)
+    {
+        dcShown = dc;
+        repaint (dcArea);
+    }
 }
 
 void BarSpectrumAnalyzerAudioProcessorEditor::resized()
@@ -86,9 +100,15 @@ void BarSpectrumAnalyzerAudioProcessorEditor::resized()
     spectrumTab.setBounds (header.removeFromLeft (110));
     header.removeFromLeft (6);
     phaseTab.setBounds (header.removeFromLeft (110));
+    header.removeFromLeft (6);
+    masterTab.setBounds (header.removeFromLeft (110));
+    header.removeFromLeft (12);
+    header.removeFromRight (200);                   // logo
+    dcArea = header.withSizeKeepingCentre (juce::jmin (header.getWidth(), 210), header.getHeight());
 
     spectrumView.setBounds (area);
     phaseView.setBounds (area);
+    masterView.setBounds (area);
 
     audioProcessor.apvts.state.setProperty (uiWidthId,  getWidth(),  nullptr);
     audioProcessor.apvts.state.setProperty (uiHeightId, getHeight(), nullptr);
@@ -114,4 +134,18 @@ void BarSpectrumAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     g.setColour (Palette::panel);
     g.fillRect (0, headerHeight - 1, getWidth(), 1);
+
+    // Aviso de DC offset: la onda esta corrida del cero (suele venir de un
+    // sample o de un plugin). Come headroom y hace "clics" al cortar.
+    if (dcShown && dcArea.getWidth() > 60)
+    {
+        auto pill = dcArea.toFloat().reduced (0.0f, 2.0f);
+        g.setColour (Palette::warn.withAlpha (0.16f));
+        g.fillRoundedRectangle (pill, pill.getHeight() * 0.5f);
+        g.setColour (Palette::warn);
+        g.drawRoundedRectangle (pill, pill.getHeight() * 0.5f, 1.0f);
+        g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        g.drawFittedText (dcArea.getWidth() > 170 ? "DC OFFSET - high-pass at ~20 Hz" : "DC OFFSET",
+                          pill.toNearestInt(), juce::Justification::centred, 1);
+    }
 }

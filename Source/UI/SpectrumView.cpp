@@ -347,6 +347,21 @@ void SpectrumView::drawLevelMeter (juce::Graphics& g)
         return juce::jmap (juce::jlimit (minDb, maxDb, db), minDb, maxDb, meterArea.getBottom(), meterArea.getY());
     };
 
+    auto dbForY = [&] (float y)
+    {
+        return juce::jmap (y, meterArea.getBottom(), meterArea.getY(), minDb, maxDb);
+    };
+
+    // Zonas de intensidad: morado (bajo), lila (-12 a -6), amarillo (-6 a -1),
+    // rojo (arriba de -1 dB, el limite que piden las plataformas).
+    auto zoneColour = [] (float db)
+    {
+        if (db > -1.0f)  return Palette::danger;
+        if (db > -6.0f)  return Palette::warn;
+        if (db > -12.0f) return Palette::barOver;
+        return Palette::barNormal;
+    };
+
     float freshPeak = -100.0f;
 
     for (int c = 0; c < 2; ++c)
@@ -364,15 +379,20 @@ void SpectrumView::drawLevelMeter (juce::Graphics& g)
 
         for (float y = meterArea.getBottom() - segH; y >= meterArea.getY(); y -= pitch)
         {
-            const bool lit = y >= rmsY;
-            g.setColour (lit ? (y < dbToY (-6.0f) ? Palette::barOver : Palette::barNormal)
-                             : Palette::panel.withAlpha (0.6f));
+            const bool lit  = y >= rmsY;
+            const auto zone = zoneColour (dbForY (y + segH * 0.5f));
+            // Apagadas, las zonas de -6 y -1 dB se ven tenues: siempre se sabe
+            // donde empieza lo caliente.
+            g.setColour (lit ? zone
+                             : (zone == Palette::warn || zone == Palette::danger ? zone.withAlpha (0.16f)
+                                                                                 : Palette::panel.withAlpha (0.6f)));
             g.fillRect (x, y, colW, segH);
         }
 
         if (shown > minDb)
         {
-            g.setColour (shown > -0.5f ? Palette::danger : Palette::text);
+            const auto zone = zoneColour (shown);
+            g.setColour (zone == Palette::barNormal ? Palette::text : zone);
             g.fillRect (x, pkY - 1.0f, colW, 2.0f);
         }
     }

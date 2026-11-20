@@ -83,6 +83,7 @@ void BarSpectrumAnalyzerAudioProcessor::prepareToPlay (double sampleRate, int)
     phaseAnalyzer.prepare (sampleRate);
     stereoAnalyzer.prepare (sampleRate);
     levelMeter.prepare (sampleRate);
+    truePeak.prepare (sampleRate);
 }
 
 void BarSpectrumAnalyzerAudioProcessor::pushSamplesForFFT (float mid, float side)
@@ -245,6 +246,7 @@ void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float*
 
     const float* chans[2] = { left, right };
     levelMeter.process (chans, numChannels, numSamples);
+    truePeak.process (chans, numChannels, numSamples);
 }
 
 juce::AudioProcessorEditor* BarSpectrumAnalyzerAudioProcessor::createEditor()

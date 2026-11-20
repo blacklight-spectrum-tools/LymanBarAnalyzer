@@ -6,6 +6,7 @@
 #include "Analysis/LevelMeter.h"
 #include "Analysis/StereoAnalyzer.h"
 #include "Analysis/LowBandBank.h"
+#include "Analysis/TruePeakMeter.h"
 #include <memory>
 #include <vector>
 
@@ -56,6 +57,7 @@ public:
     PhaseAnalyzer& getPhaseAnalyzer() noexcept { return phaseAnalyzer; }
     LevelMeter&    getLevelMeter() noexcept    { return levelMeter; }
     StereoAnalyzer& getStereoAnalyzer() noexcept { return stereoAnalyzer; }
+    TruePeakMeter&  getTruePeakMeter() noexcept  { return truePeak; }
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -95,6 +97,7 @@ private:
     PhaseAnalyzer phaseAnalyzer;
     LevelMeter    levelMeter;
     StereoAnalyzer stereoAnalyzer;
+    TruePeakMeter  truePeak;
 
     double currentSampleRate = 44100.0;
 

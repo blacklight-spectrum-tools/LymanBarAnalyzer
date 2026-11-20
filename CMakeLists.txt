@@ -35,7 +35,8 @@ target_sources(BarSpectrumAnalyzer
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/UI/SpectrumView.cpp
-        Source/UI/PhaseView.cpp)
+        Source/UI/PhaseView.cpp
+        Source/UI/MasterView.cpp)
 
 target_compile_definitions(BarSpectrumAnalyzer
     PUBLIC
