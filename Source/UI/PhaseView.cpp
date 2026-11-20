@@ -339,16 +339,17 @@ void PhaseView::drawCorrelationMeter (juce::Graphics& g, float correlation, bool
 {
     const float h = meterArea.getHeight();
 
-    // Zonas: rojo (-1 a 0), amarillo (0 a +0.3), verde (+0.3 a +1)
+    // Zonas: rojo (-1 a -0.3), amarillo (-0.3 a +0.3), verde (+0.3 a +1)
     const float x0    = meterX (-1.0f);
-    const float xZero = meterX (PhaseAnalyzer::dangerBelow);
+    const float xDang = meterX (PhaseAnalyzer::dangerBelow);
+    const float xZero = meterX (0.0f);
     const float xWarn = meterX (PhaseAnalyzer::warnBelow);
     const float x1    = meterX (1.0f);
 
     g.setColour (Palette::danger.withAlpha (0.22f));
-    g.fillRect (x0, meterArea.getY(), xZero - x0, h);
+    g.fillRect (x0, meterArea.getY(), xDang - x0, h);
     g.setColour (Palette::warn.withAlpha (0.22f));
-    g.fillRect (xZero, meterArea.getY(), xWarn - xZero, h);
+    g.fillRect (xDang, meterArea.getY(), xWarn - xDang, h);
     g.setColour (Palette::ok.withAlpha (0.22f));
     g.fillRect (xWarn, meterArea.getY(), x1 - xWarn, h);
 

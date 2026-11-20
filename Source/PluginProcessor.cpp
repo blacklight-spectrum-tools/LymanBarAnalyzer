@@ -86,8 +86,10 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (std::array<float, fftSize *
 
     const double binWidth = currentSampleRate / (double) fftSize;
 
-    // Ataque rapido, liberacion mas lenta -> se comporta como un medidor real.
-    const float attack  = 0.6f;
+    // Ataque instantaneo, liberacion mas lenta -> se comporta como un medidor
+    // real. (Con ataque suavizado, un kick corto se leia 6-14 dB por debajo
+    // de su nivel: la barra caia entre golpes y no alcanzaba a subir.)
+    const float attack  = 1.0f;
     const float release = 0.15f;
 
     for (int barIdx = 0; barIdx < numBars; ++barIdx)
@@ -124,7 +126,42 @@ void BarSpectrumAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& 
     // Con una sola entrada (mono) L y R son el mismo canal.
     const float* left  = buffer.getReadPointer (0);
     const float* right = buffer.getReadPointer (numCh > 1 ? 1 : 0);
+    const int    chans = numCh > 1 ? 2 : 1;
 
+    // Si otro plugin manda NaN o infinito, un solo sample asi dejaria los
+    // medidores trabados para siempre (los promedios se vuelven NaN). Esos
+    // samples se analizan como silencio, en una copia: el audio no se toca.
+    bool finite = true;
+    for (int s = 0; s < numSamples && finite; ++s)
+        finite = std::isfinite (left[s]) && std::isfinite (right[s]);
+
+    if (finite)
+    {
+        analyse (left, right, chans, numSamples);
+    }
+    else
+    {
+        constexpr int chunk = 256;
+        float cl[chunk], cr[chunk];
+        for (int start = 0; start < numSamples; start += chunk)
+        {
+            const int n = juce::jmin (chunk, numSamples - start);
+            for (int i = 0; i < n; ++i)
+            {
+                const float l = left[start + i], r = right[start + i];
+                cl[i] = std::isfinite (l) ? l : 0.0f;
+                cr[i] = std::isfinite (r) ? r : 0.0f;
+            }
+            analyse (cl, cr, chans, n);
+        }
+    }
+
+    // El audio sale exactamente igual que entro: este plugin es solo
+    // de referencia/medicion, no procesa la senal.
+}
+
+void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float* right, int numChannels, int numSamples)
+{
     for (int s = 0; s < numSamples; ++s)
         pushSamplesForFFT (0.5f * (left[s] + right[s]), 0.5f * (left[s] - right[s]));
 
@@ -138,10 +175,8 @@ void BarSpectrumAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& 
     phaseAnalyzer.process (left, right, numSamples);
     stereoAnalyzer.process (left, right, numSamples);
 
-    levelMeter.process (buffer.getArrayOfReadPointers(), numCh, numSamples);
-
-    // El audio sale exactamente igual que entro: este plugin es solo
-    // de referencia/medicion, no procesa la senal.
+    const float* chans[2] = { left, right };
+    levelMeter.process (chans, numChannels, numSamples);
 }
 
 juce::AudioProcessorEditor* BarSpectrumAnalyzerAudioProcessor::createEditor()

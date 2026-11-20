@@ -68,6 +68,7 @@ private:
     };
 
     void pushSamplesForFFT (float mid, float side);
+    void analyse (const float* left, const float* right, int numChannels, int numSamples);
     void computeBars (std::array<float, fftSize * 2>& data, std::array<std::atomic<float>, numBars>& levels);
 
     juce::dsp::FFT fft;

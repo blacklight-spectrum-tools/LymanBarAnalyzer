@@ -18,8 +18,11 @@ public:
     static constexpr int scopeSize = 2048;          // potencia de 2
 
     // Umbrales de la luz de fase (correlacion de -1 a +1)
+    // Alrededor de 0 = L y R distintos (estereo muy abierto, colas de delay o
+    // reverb): en mono baja un poco de volumen pero no se cancela. El rojo se
+    // reserva para correlacion claramente negativa, donde si hay cancelacion.
     static constexpr float warnBelow   = 0.3f;      // por debajo: amarillo
-    static constexpr float dangerBelow = 0.0f;      // por debajo: rojo
+    static constexpr float dangerBelow = -0.3f;     // por debajo: rojo
 
     enum class Status { noSignal, ok, warn, danger };
 

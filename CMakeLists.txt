@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(BarSpectrumAnalyzer VERSION 1.2.0)
+project(BarSpectrumAnalyzer VERSION 1.2.1)
 
 # --------------------------------------------------------------------------
 # JUCE viene como submodulo de git en ./JUCE
