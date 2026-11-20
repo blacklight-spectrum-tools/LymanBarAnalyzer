@@ -5,6 +5,9 @@
 #include "Analysis/PhaseAnalyzer.h"
 #include "Analysis/LevelMeter.h"
 #include "Analysis/StereoAnalyzer.h"
+#include "Analysis/LowBandBank.h"
+#include <memory>
+#include <vector>
 
 /**
     Analizador de espectro de referencia en BARRAS (estilo SPAN pero
@@ -18,9 +21,8 @@
 class BarSpectrumAnalyzerAudioProcessor : public juce::AudioProcessor
 {
 public:
-    static constexpr int fftOrder = 11;              // tamano de FFT = 2048 muestras
-    static constexpr int fftSize  = 1 << fftOrder;
-    static constexpr int numBars  = 28;              // cantidad de barras mostradas
+    static constexpr int   numBars    = 28;          // cantidad de barras mostradas
+    static constexpr float lowSplitHz = 240.0f;      // debajo: banco de filtros; arriba: FFT
 
     BarSpectrumAnalyzerAudioProcessor();
     ~BarSpectrumAnalyzerAudioProcessor() override;
@@ -63,16 +65,24 @@ public:
 private:
     struct SpectrumChannel
     {
-        std::array<float, fftSize>     fifo {};
-        std::array<float, fftSize * 2> data {};
+        std::vector<float> fifo;
+        std::vector<float> data;
     };
 
     void pushSamplesForFFT (float mid, float side);
     void analyse (const float* left, const float* right, int numChannels, int numSamples);
-    void computeBars (std::array<float, fftSize * 2>& data, std::array<std::atomic<float>, numBars>& levels);
+    void computeBars (SpectrumChannel&, int lowChannel, std::array<std::atomic<float>, numBars>& levels);
+    void setupAnalysis (double sampleRate);
 
-    juce::dsp::FFT fft;
-    juce::dsp::WindowingFunction<float> window;
+    // El tamano de la FFT crece con la frecuencia de muestreo (2048 a 44.1/48 kHz,
+    // 4096 a 88.2/96 kHz, 8192 a 176.4/192 kHz) para que cada cajon siga
+    // midiendo ~23 Hz y la ventana dure ~43 ms.
+    int fftSize = 2048;
+    std::unique_ptr<juce::dsp::FFT> fft;
+    std::unique_ptr<juce::dsp::WindowingFunction<float>> window;
+
+    LowBandBank lowBank;
+    int numLowBands = 0;
 
     SpectrumChannel midChannel, sideChannel;   // Mid = (L+R)/2, Side = (L-R)/2
     int  fifoIndex  = 0;

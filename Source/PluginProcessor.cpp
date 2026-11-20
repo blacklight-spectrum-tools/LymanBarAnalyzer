@@ -5,9 +5,7 @@ BarSpectrumAnalyzerAudioProcessor::BarSpectrumAnalyzerAudioProcessor()
     : AudioProcessor (BusesProperties()
                         .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "PARAMS", createLayout()),
-      fft (fftOrder),
-      window (fftSize, juce::dsp::WindowingFunction<float>::hann)
+      apvts (*this, nullptr, "PARAMS", createLayout())
 {
     for (auto& b : barLevels)
         b.store (-100.0f);
@@ -22,6 +20,39 @@ BarSpectrumAnalyzerAudioProcessor::BarSpectrumAnalyzerAudioProcessor()
         double t = (double) i / (double) numBars;
         bandEdgesHz[(size_t) i] = (float) (minF * std::pow (maxF / minF, t));
     }
+
+    // Bandas graves (borde superior <= lowSplitHz): banco de filtros
+    numLowBands = 0;
+    while (numLowBands < numBars && bandEdgesHz[(size_t) numLowBands + 1] <= lowSplitHz + 0.5f)
+        ++numLowBands;
+
+    setupAnalysis (44100.0);
+}
+
+void BarSpectrumAnalyzerAudioProcessor::setupAnalysis (double sampleRate)
+{
+    currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+
+    int order = 11;
+    if (currentSampleRate > 130000.0)     order = 13;
+    else if (currentSampleRate > 66000.0) order = 12;
+
+    if (fft == nullptr || (1 << order) != fft->getSize())
+    {
+        fftSize = 1 << order;
+        fft     = std::make_unique<juce::dsp::FFT> (order);
+        window  = std::make_unique<juce::dsp::WindowingFunction<float>> ((size_t) fftSize, juce::dsp::WindowingFunction<float>::hann);
+    }
+
+    for (auto* ch : { &midChannel, &sideChannel })
+    {
+        ch->fifo.assign ((size_t) fftSize, 0.0f);
+        ch->data.assign ((size_t) fftSize * 2, 0.0f);
+    }
+    fifoIndex  = 0;
+    blockReady = false;
+
+    lowBank.prepare (currentSampleRate, bandEdgesHz.data(), numLowBands);
 }
 
 BarSpectrumAnalyzerAudioProcessor::~BarSpectrumAnalyzerAudioProcessor() {}
@@ -48,11 +79,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout BarSpectrumAnalyzerAudioProc
 
 void BarSpectrumAnalyzerAudioProcessor::prepareToPlay (double sampleRate, int)
 {
-    currentSampleRate = sampleRate;
-    fifoIndex  = 0;
-    blockReady = false;
-    midChannel.fifo.fill (0.0f);
-    sideChannel.fifo.fill (0.0f);
+    setupAnalysis (sampleRate);
     phaseAnalyzer.prepare (sampleRate);
     stereoAnalyzer.prepare (sampleRate);
     levelMeter.prepare (sampleRate);
@@ -78,13 +105,20 @@ void BarSpectrumAnalyzerAudioProcessor::pushSamplesForFFT (float mid, float side
     ++fifoIndex;
 }
 
-void BarSpectrumAnalyzerAudioProcessor::computeBars (std::array<float, fftSize * 2>& data,
+void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lowChannel,
                                                      std::array<std::atomic<float>, numBars>& levels)
 {
-    window.multiplyWithWindowingTable (data.data(), fftSize);
-    fft.performFrequencyOnlyForwardTransform (data.data());
+    auto& data = ch.data;
+    window->multiplyWithWindowingTable (data.data(), (size_t) fftSize);
+    fft->performFrequencyOnlyForwardTransform (data.data());
 
     const double binWidth = currentSampleRate / (double) fftSize;
+    const int    lastBin  = fftSize / 2 - 1;
+
+    // Calibracion: la ventana Hann de JUCE esta normalizada (ganancia 1), asi
+    // que un seno de amplitud A da una magnitud A * N / 2. Multiplicando por
+    // 2 / N, un seno de 0 dBFS lee 0 dB en su barra.
+    const float scale = 2.0f / (float) fftSize;
 
     // Ataque instantaneo, liberacion mas lenta -> se comporta como un medidor
     // real. (Con ataque suavizado, un kick corto se leia 6-14 dB por debajo
@@ -94,18 +128,47 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (std::array<float, fftSize *
 
     for (int barIdx = 0; barIdx < numBars; ++barIdx)
     {
-        float loF = bandEdgesHz[(size_t) barIdx];
-        float hiF = bandEdgesHz[(size_t) barIdx + 1];
+        float db;
 
-        int loBin = juce::jlimit (0, fftSize / 2, (int) std::floor (loF / binWidth));
-        int hiBin = juce::jlimit (0, fftSize / 2, (int) std::ceil  (hiF / binWidth));
-        if (hiBin <= loBin) hiBin = loBin + 1;
+        if (barIdx < numLowBands)
+        {
+            // Graves: banco de filtros (separa bien bandas de pocos Hz)
+            db = juce::Decibels::gainToDecibels ((float) lowBank.getAmplitude (barIdx, lowChannel), -100.0f);
+        }
+        else
+        {
+            const double loF = bandEdgesHz[(size_t) barIdx];
+            const double hiF = bandEdgesHz[(size_t) barIdx + 1];
 
-        float peak = 0.0f;
-        for (int bin = loBin; bin < hiBin && bin < fftSize / 2; ++bin)
-            peak = juce::jmax (peak, data[(size_t) bin]);
+            // Solo los cajones cuyo centro cae dentro de la banda; si ninguno
+            // cae, el mas cercano al centro de la banda.
+            int loBin = juce::jlimit (1, lastBin, (int) std::ceil  (loF / binWidth));
+            int hiBin = juce::jlimit (1, lastBin, (int) std::floor (hiF / binWidth));
+            if (hiBin < loBin)
+                loBin = hiBin = juce::jlimit (1, lastBin, (int) std::lround (std::sqrt (loF * hiF) / binWidth));
 
-        float db = juce::Decibels::gainToDecibels (peak / (float) fftSize, -100.0f);
+            int   best = loBin;
+            float peak = data[(size_t) loBin];
+            for (int bin = loBin + 1; bin <= hiBin; ++bin)
+                if (data[(size_t) bin] > peak) { peak = data[(size_t) bin]; best = bin; }
+
+            db = juce::Decibels::gainToDecibels (peak * scale, -100.0f);
+
+            // Interpolacion parabolica (en dB) cuando el maximo es un pico real:
+            // corrige la perdida de hasta 1.4 dB cuando el tono cae entre dos
+            // cajones. Si el pico verdadero esta fuera de la banda, no se usa.
+            if (best > 1 && best < lastBin && db > -100.0f)
+            {
+                const float a = juce::Decibels::gainToDecibels (data[(size_t) best - 1] * scale, -140.0f);
+                const float c = juce::Decibels::gainToDecibels (data[(size_t) best + 1] * scale, -140.0f);
+                const float den = a - 2.0f * db + c;
+                if (a <= db && c <= db && den < 0.0f)
+                {
+                    const float pOff = juce::jlimit (-0.5f, 0.5f, 0.5f * (a - c) / den);
+                    db -= 0.25f * (a - c) * pOff;
+                }
+            }
+        }
 
         float prev   = levels[(size_t) barIdx].load();
         float coeff  = (db > prev) ? attack : release;
@@ -163,12 +226,17 @@ void BarSpectrumAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& 
 void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float* right, int numChannels, int numSamples)
 {
     for (int s = 0; s < numSamples; ++s)
-        pushSamplesForFFT (0.5f * (left[s] + right[s]), 0.5f * (left[s] - right[s]));
+    {
+        const float mid  = 0.5f * (left[s] + right[s]);
+        const float side = 0.5f * (left[s] - right[s]);
+        pushSamplesForFFT (mid, side);
+        lowBank.process (mid, side);
+    }
 
     if (blockReady)
     {
-        computeBars (midChannel.data, barLevels);
-        computeBars (sideChannel.data, sideLevels);
+        computeBars (midChannel, 0, barLevels);
+        computeBars (sideChannel, 1, sideLevels);
         blockReady = false;
     }
 
