@@ -110,6 +110,36 @@ The window is resizable and remembers its size and last open tab.
 5. On the master, open the **Master** tab, press **Reset** and play the
    whole song to read its integrated loudness, True Peak and PLR.
 
+## Roadmap (free version)
+
+Everything below is planned for the **free** version. No dates: each release
+ships when it is tested in real mixes.
+
+**Next release (1.4) — in progress**
+
+- [x] Smoother, more detailed curve: averaged like SPAN, ~3 Hz resolution in the
+      low end (kick and bass notes show as separate peaks)
+- [x] Vertical range (60 / 72 / 84 dB) and a settings menu
+- [x] Freeze and infinite peak hold (the loudest each band got in the whole song)
+- [x] Hover readout: frequency, musical note, level, distance to the reference,
+      and Mid/Side verdict per frequency
+- [ ] Mono / Side / Mid listen button (hold to listen; turns itself off on export)
+- [ ] Per-band phase warning in M/S view
+- [ ] Instrument zones (e.g. voice: body, presence, sibilance, air)
+- [ ] Master tab aware of the channel it is on (streaming table only on the master)
+- [ ] Large readings mode for screen recording and teaching
+- [ ] Dim and colour-blind friendly colour modes
+
+**Later**
+
+- [ ] Channel ghost: see another channel's curve behind yours to spot masking
+- [ ] Kick / bass note check (are they clashing?)
+- [ ] 31-band ISO view
+- [ ] macOS (AU and VST3)
+
+Ideas and feedback are welcome in
+[Issues](https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer/issues).
+
 ## Building from source
 
 Only needed if you want to change the code; the installer above is all you

@@ -115,6 +115,41 @@ abierta.
 5. En el master, abre la pestaña **Master**, dale **Reset** y reproduce la
    canción completa para leer su sonoridad integrada, True Peak y PLR.
 
+## Roadmap (versión gratuita)
+
+Todo lo de esta lista es para la versión **gratuita**. Sin fechas: cada
+versión sale cuando está probada en mezclas reales.
+
+**Próxima versión (1.4) — en curso**
+
+- [x] Curva más estable y con más detalle: promediada como SPAN, resolución de
+      ~3 Hz en graves (las notas del kick y del bajo salen como picos separados)
+- [x] Rango vertical (60 / 72 / 84 dB) y menú de configuración
+- [x] Freeze y hold infinito de picos (lo más fuerte que llegó cada banda en
+      toda la canción)
+- [x] Lectura al pasar el mouse: frecuencia, nota musical, nivel, distancia a la
+      referencia y veredicto Mid/Side por frecuencia
+- [ ] Botón de escucha Mono / Side / Mid (se mantiene presionado; se apaga solo
+      al exportar)
+- [ ] Aviso de fase por banda en la vista M/S
+- [ ] Zonas por instrumento (por ejemplo voz: cuerpo, presencia, sibilancia,
+      aire)
+- [ ] Pestaña Master que sabe en qué canal está (tabla de streaming solo en el
+      master)
+- [ ] Modo de lecturas grandes para grabar pantalla y dar clases
+- [ ] Modos de color atenuado y para daltonismo
+
+**Más adelante**
+
+- [ ] Fantasma de canal: ver la curva de otro canal detrás de la tuya para
+      detectar enmascaramiento
+- [ ] Revisión de notas kick / bajo (¿están chocando?)
+- [ ] Vista de 31 bandas ISO
+- [ ] macOS (AU y VST3)
+
+Ideas y comentarios son bienvenidos en
+[Issues](https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer/issues).
+
 ## Compilar desde el código
 
 Solo hace falta si quieres modificar el código; para usar Lyman basta con
