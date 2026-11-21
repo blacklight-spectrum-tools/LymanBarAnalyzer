@@ -24,6 +24,7 @@ class BarSpectrumAnalyzerAudioProcessor : public juce::AudioProcessor
 public:
     static constexpr int   numBars    = 28;          // cantidad de barras mostradas
     static constexpr float lowSplitHz = 240.0f;      // debajo: banco de filtros; arriba: FFT
+    static constexpr int   numCurvePoints = 120;     // puntos de la vista en curva (20 Hz a 20 kHz)
 
     BarSpectrumAnalyzerAudioProcessor();
     ~BarSpectrumAnalyzerAudioProcessor() override;
@@ -54,6 +55,16 @@ public:
     float getBarLevelDb (int barIndex) const  { return barLevels[(size_t) barIndex].load(); }
     float getSideLevelDb (int barIndex) const { return sideLevels[(size_t) barIndex].load(); }
     float getBandFrequency (int edgeIndex) const { return bandEdgesHz[(size_t) edgeIndex]; }
+
+    // Vista en curva: mas puntos que las barras (1/12 de octava aprox.)
+    float getCurveDb (int point, bool side) const
+    {
+        return (side ? curveSide : curveMid)[(size_t) point].load();
+    }
+    static float getCurveFrequency (int point)
+    {
+        return 20.0f * std::pow (1000.0f, (float) point / (float) (numCurvePoints - 1));
+    }
     PhaseAnalyzer& getPhaseAnalyzer() noexcept { return phaseAnalyzer; }
     LevelMeter&    getLevelMeter() noexcept    { return levelMeter; }
     StereoAnalyzer& getStereoAnalyzer() noexcept { return stereoAnalyzer; }
@@ -73,7 +84,8 @@ private:
 
     void pushSamplesForFFT (float mid, float side);
     void analyse (const float* left, const float* right, int numChannels, int numSamples);
-    void computeBars (SpectrumChannel&, int lowChannel, std::array<std::atomic<float>, numBars>& levels);
+    void computeBars (SpectrumChannel&, int lowChannel, std::array<std::atomic<float>, numBars>& levels,
+                      std::array<std::atomic<float>, numCurvePoints>& curve);
     void setupAnalysis (double sampleRate);
 
     // El tamano de la FFT crece con la frecuencia de muestreo (2048 a 44.1/48 kHz,
@@ -93,6 +105,7 @@ private:
     std::array<float, numBars + 1>          bandEdgesHz {};   // limites de cada banda en Hz
     std::array<std::atomic<float>, numBars> barLevels;        // nivel suavizado en dB por barra (Mid)
     std::array<std::atomic<float>, numBars> sideLevels;       // lo mismo para el canal Side
+    std::array<std::atomic<float>, numCurvePoints> curveMid, curveSide;
 
     PhaseAnalyzer phaseAnalyzer;
     LevelMeter    levelMeter;

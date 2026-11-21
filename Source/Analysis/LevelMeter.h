@@ -110,10 +110,10 @@ private:
             if (pk >= 1.0f)
                 clip.store (true);
 
-            // DC offset: promedio muy lento (~1 s) de la senal sin ponderar
+            // DC offset: promedio muy lento (~3 s) de la senal sin ponderar
             double dcSum = 0.0;
             for (int i = 0; i < numSamples; ++i) dcSum += x[i];
-            const double aDc = 1.0 - std::exp (-n / (1.0 * sr));
+            const double aDc = 1.0 - std::exp (-n / (3.0 * sr));   // ~3 s
             dcMean[(size_t) c] += aDc * (dcSum / n - dcMean[(size_t) c]);
 
             meanSquare[(size_t) c] += a * (sum / n - meanSquare[(size_t) c]);
@@ -196,7 +196,9 @@ public:
 
     /** Absolute DC offset (linear, largest of L/R). Above ~0.003 it matters. */
     float getDcOffset() const noexcept          { return dcLevel.load(); }
-    static constexpr float dcWarnLevel = 0.003f;   // ~ -50 dBFS
+    // ~ -40 dBFS. Mas bajo daba falsas alarmas: un kick asimetrico (la onda
+    // empieza hacia arriba y decae) promedia ~0.003 sin tener DC real.
+    static constexpr float dcWarnLevel = 0.01f;
 
 private:
     // --- Histogramas de sonoridad (0.1 LU por casilla, de -70 a +10 LUFS) ---

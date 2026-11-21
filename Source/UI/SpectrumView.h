@@ -26,10 +26,12 @@ private:
     static juce::String formatDb (float db);
     void setTiltButtons (int index);
     void setViewButtons (int index);
+    void setStyleButtons (int index);
     static void styleSegment (juce::TextButton&, int index, int count);
 
     void drawReadouts (juce::Graphics&);
     void drawLevelMeter (juce::Graphics&);
+    void drawCurve (juce::Graphics&, bool side, float tilt, float refDb);
 
     BarSpectrumAnalyzerAudioProcessor& audioProcessor;
 
@@ -44,6 +46,10 @@ private:
     juce::Label viewLabel;
     std::array<juce::TextButton, 2> viewButtons;
     std::unique_ptr<juce::ParameterAttachment> viewAttachment;
+
+    juce::Label styleLabel;
+    std::array<juce::TextButton, 2> styleButtons;
+    std::unique_ptr<juce::ParameterAttachment> styleAttachment;
 
     // Zonas calculadas en resized()
     juce::Rectangle<float> plotArea, readoutArea, meterArea, clipArea;

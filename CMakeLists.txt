@@ -7,6 +7,10 @@ project(BarSpectrumAnalyzer VERSION 1.2.1)
 # --------------------------------------------------------------------------
 add_subdirectory(JUCE)
 
+# En la PC de desarrollo se intenta copiar el plugin a la carpeta VST3 al
+# compilar. En GitHub Actions (instalador) se apaga: -DLYMAN_COPY_AFTER_BUILD=OFF
+option(LYMAN_COPY_AFTER_BUILD "Copy the VST3 to the system plug-in folder after building" ON)
+
 # Identidad definitiva del plugin. NO cambiar PLUGIN_MANUFACTURER_CODE ni
 # PLUGIN_CODE despues de distribuirlo: los DAWs guardan esos codigos en los
 # proyectos y, si cambian, el plugin ya no se encuentra.
@@ -22,7 +26,7 @@ juce_add_plugin(BarSpectrumAnalyzer
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
-    COPY_PLUGIN_AFTER_BUILD TRUE
+    COPY_PLUGIN_AFTER_BUILD ${LYMAN_COPY_AFTER_BUILD}
     PLUGIN_MANUFACTURER_CODE Blkt
     PLUGIN_CODE Lymn
     FORMATS VST3

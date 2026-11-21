@@ -11,6 +11,9 @@ BarSpectrumAnalyzerAudioProcessor::BarSpectrumAnalyzerAudioProcessor()
         b.store (-100.0f);
     for (auto& b : sideLevels)
         b.store (-100.0f);
+    for (auto* arr : { &curveMid, &curveSide })
+        for (auto& c : *arr)
+            c.store (-100.0f);
 
     // Bordes de banda espaciados logaritmicamente entre 20 Hz y 20 kHz,
     // igual que un analizador de espectro musical (no lineal).
@@ -74,6 +77,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout BarSpectrumAnalyzerAudioProc
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "view", 1 }, "View",
         juce::StringArray { "Sum", "M/S" }, 0));
+
+    // Estilo de la grafica: barras (por defecto) o curva
+    params.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "style", 1 }, "Style",
+        juce::StringArray { "Bars", "Curve" }, 0));
     return { params.begin(), params.end() };
 }
 
@@ -107,7 +115,8 @@ void BarSpectrumAnalyzerAudioProcessor::pushSamplesForFFT (float mid, float side
 }
 
 void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lowChannel,
-                                                     std::array<std::atomic<float>, numBars>& levels)
+                                                     std::array<std::atomic<float>, numBars>& levels,
+                                                     std::array<std::atomic<float>, numCurvePoints>& curve)
 {
     auto& data = ch.data;
     window->multiplyWithWindowingTable (data.data(), (size_t) fftSize);
@@ -126,6 +135,8 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lo
     // de su nivel: la barra caia entre golpes y no alcanzaba a subir.)
     const float attack  = 1.0f;
     const float release = 0.15f;
+
+    std::array<float, numBars> rawDb {};   // nivel de cada banda antes del suavizado
 
     for (int barIdx = 0; barIdx < numBars; ++barIdx)
     {
@@ -171,10 +182,73 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lo
             }
         }
 
+        rawDb[(size_t) barIdx] = db;
+
         float prev   = levels[(size_t) barIdx].load();
         float coeff  = (db > prev) ? attack : release;
         float smooth = prev + coeff * (db - prev);
         levels[(size_t) barIdx].store (smooth);
+    }
+
+    // --- Vista en curva -------------------------------------------------------
+    // Graves (debajo de lowSplitHz): se interpola entre los centros de las
+    // bandas del banco de filtros. Arriba: el maximo de la FFT en una ventana
+    // de 1/12 de octava alrededor de cada punto (o interpolacion entre cajones
+    // cuando la ventana es mas angosta que un cajon).
+    auto bandCentre = [this] (int i) { return std::sqrt ((double) bandEdgesHz[(size_t) i] * (double) bandEdgesHz[(size_t) i + 1]); };
+
+    auto fftDbAt = [&] (double f) -> float
+    {
+        const double lo = f * std::pow (2.0, -1.0 / 24.0), hi = f * std::pow (2.0, 1.0 / 24.0);
+        const int b0 = juce::jlimit (1, lastBin, (int) std::ceil  (lo / binWidth));
+        const int b1 = juce::jlimit (1, lastBin, (int) std::floor (hi / binWidth));
+        if (b1 >= b0)
+        {
+            float peak = 0.0f;
+            for (int bin = b0; bin <= b1; ++bin) peak = juce::jmax (peak, data[(size_t) bin]);
+            return juce::Decibels::gainToDecibels (peak * scale, -100.0f);
+        }
+        const double pos = juce::jlimit (1.0, (double) lastBin, f / binWidth);
+        const int    k   = juce::jlimit (1, lastBin - 1, (int) std::floor (pos));
+        const float  a   = juce::Decibels::gainToDecibels (data[(size_t) k] * scale, -100.0f);
+        const float  c   = juce::Decibels::gainToDecibels (data[(size_t) k + 1] * scale, -100.0f);
+        return a + (c - a) * (float) (pos - k);
+    };
+
+    for (int p = 0; p < numCurvePoints; ++p)
+    {
+        const double f = getCurveFrequency (p);
+        float db;
+
+        if (numLowBands > 0 && f < lowSplitHz)
+        {
+            const double lastLow = bandCentre (numLowBands - 1);
+            if (f <= bandCentre (0))
+            {
+                db = rawDb[0];
+            }
+            else if (f >= lastLow)
+            {
+                // Puente entre el ultimo filtro y la FFT
+                const double t = std::log (f / lastLow) / std::log ((double) lowSplitHz / lastLow);
+                db = rawDb[(size_t) numLowBands - 1] + (float) t * (fftDbAt (lowSplitHz) - rawDb[(size_t) numLowBands - 1]);
+            }
+            else
+            {
+                int i = 0;
+                while (i < numLowBands - 2 && f > bandCentre (i + 1)) ++i;
+                const double t = std::log (f / bandCentre (i)) / std::log (bandCentre (i + 1) / bandCentre (i));
+                db = rawDb[(size_t) i] + (float) t * (rawDb[(size_t) i + 1] - rawDb[(size_t) i]);
+            }
+        }
+        else
+        {
+            db = fftDbAt (f);
+        }
+
+        float prev   = curve[(size_t) p].load();
+        float coeff  = (db > prev) ? attack : release;
+        curve[(size_t) p].store (prev + coeff * (db - prev));
     }
 }
 
@@ -236,8 +310,8 @@ void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float*
 
     if (blockReady)
     {
-        computeBars (midChannel, 0, barLevels);
-        computeBars (sideChannel, 1, sideLevels);
+        computeBars (midChannel, 0, barLevels, curveMid);
+        computeBars (sideChannel, 1, sideLevels, curveSide);
         blockReady = false;
     }
 

@@ -7,6 +7,7 @@ namespace
     constexpr float tiltSlopes[] = { 0.0f, 3.0f, 4.5f };   // dB por octava, pivote 1 kHz
     const char* const tiltNames[] = { "0", "3 dB", "4.5 dB" };
     const char* const viewNames[] = { "Sum", "M/S" };
+    const char* const styleNames[] = { "Bars", "Curve" };
 
     constexpr double holdMs          = 1000.0;   // peak hold: tiempo quieto
     constexpr float  holdFallDbPerS  = 15.0f;    // y luego cae a esta velocidad
@@ -79,6 +80,35 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
             *viewParam, [this] (float v) { setViewButtons ((int) std::round (v)); });
         viewAttachment->sendInitialUpdate();
     }
+
+    // Estilo: barras, curva o ambas (solo cambia el dibujo)
+    styleLabel.setText ("STYLE", juce::dontSendNotification);
+    styleLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    styleLabel.setColour (juce::Label::textColourId, Palette::textDim);
+    styleLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (styleLabel);
+
+    for (int i = 0; i < 2; ++i)
+    {
+        auto& b = styleButtons[(size_t) i];
+        b.setButtonText (styleNames[i]);
+        styleSegment (b, i, 2);
+        b.onClick = [this, i] { if (styleAttachment != nullptr) styleAttachment->setValueAsCompleteGesture ((float) i); };
+        addAndMakeVisible (b);
+    }
+
+    if (auto* styleParam = audioProcessor.apvts.getParameter ("style"))
+    {
+        styleAttachment = std::make_unique<juce::ParameterAttachment> (
+            *styleParam, [this] (float v) { setStyleButtons ((int) std::round (v)); });
+        styleAttachment->sendInitialUpdate();
+    }
+}
+
+void SpectrumView::setStyleButtons (int index)
+{
+    for (int i = 0; i < 2; ++i)
+        styleButtons[(size_t) i].setToggleState (i == index, juce::dontSendNotification);
 }
 
 void SpectrumView::styleSegment (juce::TextButton& b, int index, int count)
@@ -123,21 +153,27 @@ void SpectrumView::resized()
 {
     auto area = getLocalBounds().reduced (16, 12);
 
+    // Fila 1: referencia + lecturas (Peak / RMS / LUFS) a la derecha
     auto row1 = area.removeFromTop (30);
     referenceLabel.setBounds (row1.removeFromLeft (210));
+    readoutArea = row1.removeFromRight (row1.getWidth() >= 560 ? 300 : 200).toFloat();
+    row1.removeFromRight (12);
     referenceSlider.setBounds (row1);
 
+    // Fila 2: TILT / VIEW / STYLE
     area.removeFromTop (8);
     auto row2 = area.removeFromTop (26);
-    tiltLabel.setBounds (row2.removeFromLeft (36));
+    tiltLabel.setBounds (row2.removeFromLeft (34));
     for (auto& b : tiltButtons)
-        b.setBounds (row2.removeFromLeft (56));
-    row2.removeFromLeft (14);
-    viewLabel.setBounds (row2.removeFromLeft (40));
-    for (auto& b : viewButtons)
         b.setBounds (row2.removeFromLeft (52));
     row2.removeFromLeft (14);
-    readoutArea = row2.toFloat();
+    viewLabel.setBounds (row2.removeFromLeft (38));
+    for (auto& b : viewButtons)
+        b.setBounds (row2.removeFromLeft (48));
+    row2.removeFromLeft (14);
+    styleLabel.setBounds (row2.removeFromLeft (44));
+    for (auto& b : styleButtons)
+        b.setBounds (row2.removeFromLeft (54));
 
     area.removeFromTop (14);
 
@@ -179,6 +215,7 @@ void SpectrumView::paint (juce::Graphics& g)
     const int   tiltIndex = juce::jlimit (0, 2, (int) std::round (audioProcessor.apvts.getRawParameterValue ("tilt")->load()));
     const float tilt = tiltSlopes[tiltIndex];
     const bool  showSide = audioProcessor.apvts.getRawParameterValue ("view")->load() > 0.5f;
+    const bool  showBars = audioProcessor.apvts.getRawParameterValue ("style")->load() < 0.5f;
 
     auto dbToY = [&] (float db)
     {
@@ -208,7 +245,15 @@ void SpectrumView::paint (juce::Graphics& g)
     // Barras, peak hold y dB por encima de la referencia
     const bool compactNumbers = barWidth < 21.0f;
 
-    for (int i = 0; i < numBars; ++i)
+    // Curva: sombras (Mid, y Side encima en M/S) y "+dB" por zona
+    if (! showBars)
+    {
+        drawCurve (g, false, tilt, refDb);
+        if (showSide)
+            drawCurve (g, true, tilt, refDb);
+    }
+
+    for (int i = 0; i < numBars && showBars; ++i)
     {
         // Centro de la banda (media geometrica) para aplicar el tilt
         const float centreHz = std::sqrt (audioProcessor.getBandFrequency (i) * audioProcessor.getBandFrequency (i + 1));
@@ -328,6 +373,102 @@ void SpectrumView::paint (juce::Graphics& g)
 
     drawLevelMeter (g);
     drawReadouts (g);
+}
+
+void SpectrumView::drawCurve (juce::Graphics& g, bool side, float tilt, float refDb)
+{
+    using P = BarSpectrumAnalyzerAudioProcessor;
+    const auto plot = plotArea;
+
+    auto dbToY = [&] (float db)
+    {
+        return juce::jmap (juce::jlimit (minDb - 6.0f, maxDb, db), minDb, maxDb, plot.getBottom(), plot.getY());
+    };
+    auto freqToX = [&] (float hz)
+    {
+        return plot.getX() + std::log (hz / 20.0f) / std::log (1000.0f) * plot.getWidth();
+    };
+
+    // Puntos de la curva (con tilt). La linea pasa EXACTAMENTE por cada
+    // punto medido: curvas tipo Catmull-Rom con los puntos de control
+    // limitados entre sus vecinos, asi nunca dibuja picos que no existen.
+    std::array<float, P::numCurvePoints> dbs;
+    std::array<juce::Point<float>, P::numCurvePoints> pts;
+    for (int i = 0; i < P::numCurvePoints; ++i)
+    {
+        const float hz = P::getCurveFrequency (i);
+        dbs[(size_t) i] = audioProcessor.getCurveDb (i, side) + tilt * std::log2 (hz / 1000.0f);
+        pts[(size_t) i] = { freqToX (hz), juce::jmin (plot.getBottom(), dbToY (dbs[(size_t) i])) };
+    }
+
+    juce::Path line;
+    line.startNewSubPath (pts[0]);
+    for (int i = 1; i < P::numCurvePoints; ++i)
+    {
+        const auto p0 = pts[(size_t) juce::jmax (0, i - 2)], p1 = pts[(size_t) i - 1];
+        const auto p2 = pts[(size_t) i], p3 = pts[(size_t) juce::jmin (P::numCurvePoints - 1, i + 1)];
+        const float lo = juce::jmin (p1.y, p2.y), hi = juce::jmax (p1.y, p2.y);
+        juce::Point<float> c1 (p1.x + (p2.x - p0.x) / 6.0f, juce::jlimit (lo, hi, p1.y + (p2.y - p0.y) / 6.0f));
+        juce::Point<float> c2 (p2.x - (p3.x - p1.x) / 6.0f, juce::jlimit (lo, hi, p2.y - (p3.y - p1.y) / 6.0f));
+        line.cubicTo (c1, c2, p2);
+    }
+
+    juce::Path area (line);
+    area.lineTo (plot.getRight(), plot.getBottom());
+    area.lineTo (plot.getX(), plot.getBottom());
+    area.closeSubPath();
+
+    g.saveState();
+    g.reduceClipRegion (plot.toNearestInt());
+
+    // Sombra: relleno que se desvanece hacia abajo y un borde suave
+    const auto base = side ? Palette::side : Palette::barNormal;
+    g.setGradientFill (juce::ColourGradient (base.withAlpha (side ? 0.40f : 0.70f), 0.0f, plot.getY(),
+                                             base.withAlpha (side ? 0.08f : 0.18f), 0.0f, plot.getBottom(), false));
+    g.fillPath (area);
+
+    if (! side)
+    {
+        // Lo que pasa la referencia, resaltado (el dato para comprimir)
+        const float refY = dbToY (refDb);
+        g.saveState();
+        g.reduceClipRegion (juce::Rectangle<float>::leftTopRightBottom (plot.getX(), plot.getY(), plot.getRight(), refY).toNearestInt());
+        g.setColour (Palette::barOver.withAlpha (0.85f));
+        g.fillPath (area);
+        g.restoreState();
+    }
+
+    g.setColour ((side ? Palette::side : Palette::barOver).withAlpha (0.9f));
+    g.strokePath (line, juce::PathStrokeType (1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.restoreState();
+
+    // "+dB" una vez por cada zona que pasa la referencia, en su punto mas alto
+    if (! side)
+    {
+        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        float lastRight = -1.0e9f;
+        int labels = 0;
+        for (int i = 0; i < P::numCurvePoints && labels < 8; )
+        {
+            if (dbs[(size_t) i] <= refDb) { ++i; continue; }
+            int best = i;
+            while (i < P::numCurvePoints && dbs[(size_t) i] > refDb)
+            {
+                if (dbs[(size_t) i] > dbs[(size_t) best]) best = i;
+                ++i;
+            }
+            const float amount = dbs[(size_t) best] - refDb;
+            if (amount < 0.5f) continue;
+            const auto p = pts[(size_t) best];
+            auto box = juce::Rectangle<float> (p.x - 20.0f, juce::jmax (plot.getY(), p.y - 17.0f), 40.0f, 13.0f);
+            if (box.getX() < lastRight + 2.0f) continue;
+            g.setColour (Palette::barOver);
+            g.drawText ("+" + juce::String (amount, 1), box, juce::Justification::centred);
+            lastRight = box.getRight();
+            ++labels;
+        }
+        g.setFont (juce::FontOptions (11.0f));
+    }
 }
 
 void SpectrumView::drawLevelMeter (juce::Graphics& g)
