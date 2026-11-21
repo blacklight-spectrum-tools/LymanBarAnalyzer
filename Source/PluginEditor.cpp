@@ -37,6 +37,10 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
         ++index;
     }
 
+    settingsButton.setTooltip ("Settings: curve speed, vertical range, peak hold");
+    settingsButton.onClick = [this] { spectrumView.showSettingsMenu (settingsButton); };
+    addAndMakeVisible (settingsButton);
+
     addChildComponent (spectrumView);
     addChildComponent (phaseView);
     addChildComponent (masterView);
@@ -99,13 +103,18 @@ void BarSpectrumAnalyzerAudioProcessorEditor::resized()
     auto area   = getLocalBounds();
     auto header = area.removeFromTop (headerHeight).reduced (12, 8);
 
-    spectrumTab.setBounds (header.removeFromLeft (110));
+    // Pestanas un poco mas angostas en ventanas chicas, para que quepan el
+    // engrane y el aviso de DC
+    const int tabW = getWidth() < 720 ? 96 : 110;
+    spectrumTab.setBounds (header.removeFromLeft (tabW));
     header.removeFromLeft (6);
-    phaseTab.setBounds (header.removeFromLeft (110));
+    phaseTab.setBounds (header.removeFromLeft (tabW));
     header.removeFromLeft (6);
-    masterTab.setBounds (header.removeFromLeft (110));
+    masterTab.setBounds (header.removeFromLeft (tabW));
     header.removeFromLeft (12);
     header.removeFromRight (200);                   // logo
+    settingsButton.setBounds (header.removeFromRight (28).withSizeKeepingCentre (28, 28));
+    header.removeFromRight (8);
     dcArea = header.withSizeKeepingCentre (juce::jmin (header.getWidth(), 210), header.getHeight());
 
     spectrumView.setBounds (area);

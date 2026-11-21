@@ -122,6 +122,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout BarSpectrumAnalyzerAudioProc
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "range", 1 }, "Range",
         juce::StringArray { "60 dB", "72 dB", "84 dB" }, 0));
+
+    // Peak hold: normal (quieto 1 s y luego cae) o infinito (el maximo de
+    // toda la cancion, hasta reiniciar con doble clic o desde el engrane)
+    params.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "peakHold", 1 }, "Peak hold",
+        juce::StringArray { "Normal", "Infinite" }, 0));
     return { params.begin(), params.end() };
 }
 

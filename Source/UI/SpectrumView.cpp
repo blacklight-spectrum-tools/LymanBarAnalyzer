@@ -20,8 +20,12 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
 {
     static_assert (numBars == BarSpectrumAnalyzerAudioProcessor::numBars, "numero de barras");
 
-    holdDb.fill (minDb);
+    holdDb.fill (-100.0f);
     holdTime.fill (0.0);
+    curveHoldMid.assign  ((size_t) BarSpectrumAnalyzerAudioProcessor::numCurvePoints, -100.0f);
+    curveHoldSide.assign ((size_t) BarSpectrumAnalyzerAudioProcessor::numCurvePoints, -100.0f);
+    frozenCurveMid.assign  ((size_t) BarSpectrumAnalyzerAudioProcessor::numCurvePoints, -100.0f);
+    frozenCurveSide.assign ((size_t) BarSpectrumAnalyzerAudioProcessor::numCurvePoints, -100.0f);
 
     referenceSlider.setSliderStyle (juce::Slider::LinearHorizontal);
     referenceSlider.setRange (-60.0, 0.0, 0.1);
@@ -104,9 +108,66 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
         styleAttachment->sendInitialUpdate();
     }
 
-    settingsButton.setTooltip ("Settings: curve speed, vertical range");
-    settingsButton.onClick = [this] { showSettingsMenu(); };
-    addAndMakeVisible (settingsButton);
+    styleSegment (freezeButton, 0, 1);
+    freezeButton.setTooltip ("Freeze the display to study it (meters keep running)");
+    freezeButton.onClick = [this] { setFrozen (! frozen); };
+    addAndMakeVisible (freezeButton);
+}
+
+void SpectrumView::setFrozen (bool shouldFreeze)
+{
+    using P = BarSpectrumAnalyzerAudioProcessor;
+    if (shouldFreeze && ! frozen)
+    {
+        for (int i = 0; i < numBars; ++i)
+        {
+            frozenBars[(size_t) i]     = audioProcessor.getBarLevelDb (i);
+            frozenSideBars[(size_t) i] = audioProcessor.getSideLevelDb (i);
+        }
+        for (int i = 0; i < P::numCurvePoints; ++i)
+        {
+            frozenCurveMid[(size_t) i]  = audioProcessor.getCurveDb (i, false);
+            frozenCurveSide[(size_t) i] = audioProcessor.getCurveDb (i, true);
+        }
+    }
+    else if (! shouldFreeze && frozen)
+    {
+        // Al soltar, el hold normal vuelve a contar desde ahora
+        holdTime.fill (juce::Time::getMillisecondCounterHiRes());
+    }
+    frozen = shouldFreeze;
+    freezeButton.setToggleState (frozen, juce::dontSendNotification);
+    repaint();
+}
+
+void SpectrumView::resetPeaks()
+{
+    holdDb.fill (-100.0f);
+    std::fill (curveHoldMid.begin(),  curveHoldMid.end(),  -100.0f);
+    std::fill (curveHoldSide.begin(), curveHoldSide.end(), -100.0f);
+    repaint();
+}
+
+float SpectrumView::barDb (int i) const     { return frozen ? frozenBars[(size_t) i]     : audioProcessor.getBarLevelDb (i); }
+float SpectrumView::sideBarDb (int i) const { return frozen ? frozenSideBars[(size_t) i] : audioProcessor.getSideLevelDb (i); }
+float SpectrumView::curveDb (int i, bool side) const
+{
+    if (frozen)
+        return side ? frozenCurveSide[(size_t) i] : frozenCurveMid[(size_t) i];
+    return audioProcessor.getCurveDb (i, side);
+}
+
+juce::String SpectrumView::noteName (float hz)
+{
+    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    const double midi  = 69.0 + 12.0 * std::log2 (hz / 440.0);
+    const int    n     = (int) std::lround (midi);
+    const int    cents = (int) std::lround ((midi - n) * 100.0);
+    const int    octave = n / 12 - 1;
+    juce::String s = juce::String (names[((n % 12) + 12) % 12]) + juce::String (octave);
+    if (cents != 0)
+        s << " " << (cents > 0 ? "+" : "") << cents << juce::String (juce::CharPointer_UTF8 ("\xc2\xa2"));
+    return s;
 }
 
 void GearButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
@@ -138,7 +199,7 @@ void GearButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     g.fillPath (gear);
 }
 
-void SpectrumView::showSettingsMenu()
+void SpectrumView::showSettingsMenu (juce::Component& target)
 {
     auto& apvts = audioProcessor.apvts;
     auto current = [&apvts] (const char* id) { return (int) std::round (apvts.getRawParameterValue (id)->load()); };
@@ -154,6 +215,11 @@ void SpectrumView::showSettingsMenu()
     for (int i = 0; i < 3; ++i)
         menu.addItem (11 + i, ranges[i], true, current ("range") == i);
 
+    menu.addSectionHeader ("Peak hold");
+    menu.addItem (21, "Normal (1 s)", true, current ("peakHold") == 0);
+    menu.addItem (22, "Infinite (whole song)", true, current ("peakHold") == 1);
+    menu.addItem (23, "Reset peaks (or double-click the graph)");
+
     auto setChoice = [&apvts] (const char* id, int index)
     {
         if (auto* param = apvts.getParameter (id))
@@ -164,11 +230,18 @@ void SpectrumView::showSettingsMenu()
         }
     };
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&settingsButton),
-                        [setChoice] (int result)
+    juce::Component::SafePointer<SpectrumView> safeThis (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&target),
+                        [setChoice, safeThis] (int result)
                         {
                             if (result >= 1 && result <= 3)        setChoice ("curveSpeed", result - 1);
                             else if (result >= 11 && result <= 13) setChoice ("range", result - 11);
+                            else if (result == 21 || result == 22)
+                            {
+                                setChoice ("peakHold", result - 21);
+                                if (safeThis != nullptr) safeThis->resetPeaks();
+                            }
+                            else if (result == 23 && safeThis != nullptr) safeThis->resetPeaks();
                         });
 }
 
@@ -241,7 +314,7 @@ void SpectrumView::resized()
     styleLabel.setBounds (row2.removeFromLeft (44));
     for (auto& b : styleButtons)
         b.setBounds (row2.removeFromLeft (54));
-    settingsButton.setBounds (row2.removeFromRight (26));
+    freezeButton.setBounds (row2.removeFromRight (64));
 
     area.removeFromTop (14);
 
@@ -266,6 +339,22 @@ void SpectrumView::mouseDown (const juce::MouseEvent& e)
         audioProcessor.getLevelMeter().resetClip();
 }
 
+void SpectrumView::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    // Doble clic en la grafica: reiniciar los picos (sobre todo en hold infinito)
+    if (plotArea.contains (e.position))
+        resetPeaks();
+}
+
+void SpectrumView::mouseMove (const juce::MouseEvent& e)
+{
+    if (plotArea.contains (e.position)) hoverPos = e.position;
+    else                                hoverPos.reset();
+}
+
+void SpectrumView::mouseDrag (const juce::MouseEvent& e) { mouseMove (e); }
+void SpectrumView::mouseExit (const juce::MouseEvent&)   { hoverPos.reset(); }
+
 void SpectrumView::paint (juce::Graphics& g)
 {
     g.fillAll (Palette::background);
@@ -287,6 +376,7 @@ void SpectrumView::paint (juce::Graphics& g)
     const float tilt = tiltSlopes[tiltIndex];
     const bool  showSide = audioProcessor.apvts.getRawParameterValue ("view")->load() > 0.5f;
     const bool  showBars = audioProcessor.apvts.getRawParameterValue ("style")->load() < 0.5f;
+    const bool  infiniteHold = audioProcessor.apvts.getRawParameterValue ("peakHold")->load() > 0.5f;
 
     auto dbToY = [&] (float db)
     {
@@ -328,7 +418,9 @@ void SpectrumView::paint (juce::Graphics& g)
     {
         // Centro de la banda (media geometrica) para aplicar el tilt
         const float centreHz = std::sqrt (audioProcessor.getBandFrequency (i) * audioProcessor.getBandFrequency (i + 1));
-        const float db = audioProcessor.getBarLevelDb (i) + tilt * std::log2 (centreHz / 1000.0f);
+        const float tiltOff = tilt * std::log2 (centreHz / 1000.0f);
+        const float raw = barDb (i);
+        const float db  = raw + tiltOff;
 
         const float x   = plot.getX() + (float) i * (barWidth + barGap);
         const float top = dbToY (db);
@@ -340,7 +432,7 @@ void SpectrumView::paint (juce::Graphics& g)
 
         // Si el tilt empuja una banda con sonido real por debajo de la grafica,
         // una flechita lo indica: "aqui hay sonido, solo que queda abajo".
-        if (db < minDb && audioProcessor.getBarLevelDb (i) > -80.0f)
+        if (db < minDb && raw > -80.0f)
         {
             const float cx = x + barWidth * 0.5f, by = plot.getBottom() - 3.0f;
             const float hw = juce::jmin (5.0f, barWidth * 0.35f);
@@ -350,28 +442,33 @@ void SpectrumView::paint (juce::Graphics& g)
             g.fillPath (arrow);
         }
 
-        // Peak hold: se queda quieto 1 s y luego baja
+        // Peak hold: normal = quieto 1 s y luego baja; infinito = no baja.
+        // Congelado: no cambia. Se guarda sin tilt y se dibuja con tilt.
         auto& hold = holdDb[(size_t) i];
-        if (db >= hold)
+        if (! frozen)
         {
-            hold = db;
-            holdTime[(size_t) i] = now;
+            if (raw >= hold)
+            {
+                hold = raw;
+                holdTime[(size_t) i] = now;
+            }
+            else if (! infiniteHold && now - holdTime[(size_t) i] > holdMs)
+            {
+                hold = juce::jmax (raw, hold - holdFallDbPerS * dt);
+            }
         }
-        else if (now - holdTime[(size_t) i] > holdMs)
-        {
-            hold = juce::jmax (db, hold - holdFallDbPerS * dt);
-        }
+        const float holdShown = hold + tiltOff;
 
-        if (hold > minDb + 1.0f)
+        if (holdShown > minDb + 1.0f)
         {
             g.setColour (Palette::text.withAlpha (0.9f));
-            g.fillRect (x, dbToY (hold) - 1.0f, barWidth, 2.0f);
+            g.fillRect (x, dbToY (holdShown) - 1.0f, barWidth, 2.0f);
         }
 
         // Vista M/S: el canal Side como barra angosta cian encima de la Mid
         if (showSide)
         {
-            const float sideDb  = audioProcessor.getSideLevelDb (i) + tilt * std::log2 (centreHz / 1000.0f);
+            const float sideDb  = sideBarDb (i) + tiltOff;
             const float sideTop = dbToY (sideDb);
             const float sideW   = juce::jmax (2.0f, barWidth * 0.5f);
 
@@ -390,7 +487,7 @@ void SpectrumView::paint (juce::Graphics& g)
             const float amount = db - refDb;
             const auto text = "+" + (compactNumbers ? juce::String (juce::roundToInt (amount))
                                                     : juce::String (amount, 1));
-            const float textY = juce::jmax (plot.getY(), juce::jmin (top, dbToY (hold)) - 16.0f);
+            const float textY = juce::jmax (plot.getY(), juce::jmin (top, dbToY (holdShown)) - 16.0f);
 
             g.setColour (Palette::barOver);
             g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
@@ -442,8 +539,163 @@ void SpectrumView::paint (juce::Graphics& g)
         g.drawText ("SIDE", legend.withTrimmedLeft (68.0f), juce::Justification::centredLeft);
     }
 
+    // Congelado: aviso en la esquina de la grafica
+    if (frozen)
+    {
+        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        g.setColour (Palette::barOver);
+        g.drawText ("FROZEN", juce::Rectangle<float> (plot.getX() + 8.0f, plot.getY() + 6.0f, 80.0f, 14.0f),
+                    juce::Justification::centredLeft);
+        g.setFont (juce::FontOptions (11.0f));
+    }
+
+    drawHover (g, tilt, refDb, showBars, showSide, barWidth, barGap);
     drawLevelMeter (g);
     drawReadouts (g);
+}
+
+void SpectrumView::drawHover (juce::Graphics& g, float tilt, float refDb, bool showBars, bool showSide,
+                              float barWidth, float barGap)
+{
+    using P = BarSpectrumAnalyzerAudioProcessor;
+    if (! hoverPos.has_value() || ! plotArea.contains (*hoverPos))
+        return;
+
+    const auto plot = plotArea;
+    auto dbToY = [&] (float db)
+    {
+        return juce::jmap (juce::jlimit (minDb, maxDb, db), minDb, maxDb, plot.getBottom(), plot.getY());
+    };
+
+    float x = hoverPos->x;
+    juce::StringArray lines;
+    float midShown = -200.0f, sideShown = -200.0f;
+
+    if (showBars)
+    {
+        // Barras: la banda bajo el mouse
+        const int i = juce::jlimit (0, numBars - 1, (int) ((x - plot.getX()) / (barWidth + barGap)));
+        const float loHz = audioProcessor.getBandFrequency (i), hiHz = audioProcessor.getBandFrequency (i + 1);
+        const float tiltOff = tilt * std::log2 (std::sqrt (loHz * hiHz) / 1000.0f);
+        const float bx = plot.getX() + (float) i * (barWidth + barGap);
+        x = bx + barWidth * 0.5f;
+        midShown  = barDb (i) + tiltOff;
+        sideShown = sideBarDb (i) + tiltOff;
+
+        g.setColour (Palette::text.withAlpha (0.10f));
+        g.fillRect (juce::Rectangle<float> (bx - 1.0f, plot.getY(), barWidth + 2.0f, plot.getHeight()));
+
+        const juce::String dash (juce::CharPointer_UTF8 ("\xe2\x80\x93"));
+        lines.add (hiHz < 1000.0f ? juce::String (juce::roundToInt (loHz)) + dash + juce::String (juce::roundToInt (hiHz)) + " Hz"
+                                  : juce::String (loHz / 1000.0f, loHz < 10000.0f ? 2 : 1) + dash
+                                      + juce::String (hiHz / 1000.0f, hiHz < 10000.0f ? 2 : 1) + " kHz");
+    }
+    else
+    {
+        // Curva: el valor de la curva en la frecuencia exacta del mouse
+        const float t   = juce::jlimit (0.0f, 1.0f, (x - plot.getX()) / plot.getWidth());
+        const float hz  = 20.0f * std::pow (1000.0f, t);
+        const float pos = t * (float) (P::numCurvePoints - 1);
+        const int   k   = juce::jlimit (0, P::numCurvePoints - 2, (int) pos);
+        const float f   = pos - (float) k;
+        const float tiltOff = tilt * std::log2 (hz / 1000.0f);
+        auto valueAt = [&] (bool side) { return curveDb (k, side) + (curveDb (k + 1, side) - curveDb (k, side)) * f; };
+        midShown  = valueAt (false) + tiltOff;
+        sideShown = valueAt (true) + tiltOff;
+
+        const juce::String hzText = hz < 100.0f ? juce::String (hz, 1) + " Hz"
+                                  : hz < 1000.0f ? juce::String (juce::roundToInt (hz)) + " Hz"
+                                                 : juce::String (hz / 1000.0f, 2) + " kHz";
+        lines.add (hzText + "   " + noteName (hz));
+    }
+
+    // Lineas: vertical en la frecuencia; horizontal desde el punto de la
+    // senal hasta la escala de dB (se lee el nivel real, no el del mouse)
+    const float midY = dbToY (midShown);
+    g.setColour (Palette::text.withAlpha (0.35f));
+    g.drawVerticalLine ((int) x, plot.getY(), plot.getBottom());
+    if (midShown > minDb)
+        g.drawHorizontalLine ((int) midY, plot.getX(), x);
+
+    auto dot = [&] (float y, juce::Colour c)
+    {
+        g.setColour (Palette::background);
+        g.fillEllipse (x - 4.5f, y - 4.5f, 9.0f, 9.0f);
+        g.setColour (c);
+        g.fillEllipse (x - 3.0f, y - 3.0f, 6.0f, 6.0f);
+    };
+    if (showSide && sideShown > minDb) dot (dbToY (sideShown), Palette::side);
+    if (midShown > minDb)              dot (midY, Palette::barOver);
+
+    auto dbText = [] (float v) { return v <= -99.0f ? juce::String ("--") : juce::String (v, 1) + " dB"; };
+    lines.add ((showSide ? "Mid  " : "") + dbText (midShown));
+    if (showSide)
+        lines.add ("Side " + dbText (sideShown));
+
+    // M/S: distancia Side-Mid ya restada, y que significa. En una banda,
+    // M^2 - S^2 = L*R, asi que la correlacion de esa zona sale de los dos
+    // niveles; mismos limites y palabras que la pestana Phase.
+    juce::String gapLine, verdict;
+    juce::Colour verdictColour = Palette::textDim;
+    if (showSide && midShown > -99.0f && sideShown > -99.0f)
+    {
+        const float gap = midShown - sideShown;          // el tilt se cancela
+        gapLine = "Side " + juce::String (std::abs (gap), 1) + (gap >= 0.0f ? " dB below Mid" : " dB above Mid");
+
+        const float ratio = std::pow (10.0f, -gap / 10.0f);  // potencia Side / Mid
+        const float corr  = (1.0f - ratio) / (1.0f + ratio);
+        if (corr >= 0.9f)                            { verdict = "Mostly mono";              verdictColour = Palette::ok; }
+        else if (corr >= PhaseAnalyzer::warnBelow)   { verdict = "Stereo, mono-safe";        verdictColour = Palette::ok; }
+        else if (corr >= PhaseAnalyzer::dangerBelow) { verdict = "Wide - check in mono";     verdictColour = Palette::warn; }
+        else                                         { verdict = "Phase cancellation risk";  verdictColour = Palette::danger; }
+    }
+
+    juce::String refLine;
+    if (midShown > -99.0f)
+    {
+        const float diff = midShown - refDb;
+        refLine = (diff >= 0.0f ? "+" + juce::String (diff, 1) + " over ref" : juce::String (diff, 1) + " below ref");
+    }
+    if (tilt > 0.0f)
+        lines.add ("(tilt " + juce::String (tilt, 1) + " dB/oct)");
+
+    // Cuadro junto al cursor, siempre dentro de la grafica
+    g.setFont (juce::FontOptions (11.5f));
+    const int rows = lines.size() + (refLine.isNotEmpty() ? 1 : 0) + (gapLine.isNotEmpty() ? 2 : 0);
+    const float w = gapLine.isNotEmpty() ? 172.0f : 150.0f, h = 8.0f + 15.0f * (float) rows;
+    float bx = hoverPos->x + 14.0f, by = hoverPos->y + 14.0f;
+    if (bx + w > plot.getRight()) bx = hoverPos->x - 14.0f - w;
+    if (by + h > plot.getBottom()) by = hoverPos->y - 14.0f - h;
+    const auto box = juce::Rectangle<float> (bx, juce::jmax (plot.getY(), by), w, h);
+
+    g.setColour (Palette::panel.withAlpha (0.94f));
+    g.fillRoundedRectangle (box, 4.0f);
+    g.setColour (Palette::grid);
+    g.drawRoundedRectangle (box, 4.0f, 1.0f);
+
+    auto row = box.reduced (8.0f, 4.0f).withHeight (15.0f);
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        const bool isSide = lines[i].startsWith ("Side");
+        g.setColour (i == 0 ? Palette::text : isSide ? Palette::side : lines[i].startsWith ("(") ? Palette::textDim : Palette::barOver);
+        g.drawText (lines[i], row, juce::Justification::centredLeft);
+        row.translate (0.0f, 15.0f);
+    }
+    if (gapLine.isNotEmpty())
+    {
+        g.setColour (Palette::text);
+        g.drawText (gapLine, row, juce::Justification::centredLeft);
+        row.translate (0.0f, 15.0f);
+        g.setColour (verdictColour);
+        g.drawText (verdict, row, juce::Justification::centredLeft);
+        row.translate (0.0f, 15.0f);
+    }
+    if (refLine.isNotEmpty())
+    {
+        g.setColour (midShown > refDb ? Palette::barOver : Palette::textDim);
+        g.drawText (refLine, row, juce::Justification::centredLeft);
+    }
+    g.setFont (juce::FontOptions (11.0f));
 }
 
 void SpectrumView::drawCurve (juce::Graphics& g, bool side, float tilt, float refDb)
@@ -468,7 +720,7 @@ void SpectrumView::drawCurve (juce::Graphics& g, bool side, float tilt, float re
     for (int i = 0; i < P::numCurvePoints; ++i)
     {
         const float hz = P::getCurveFrequency (i);
-        dbs[(size_t) i] = audioProcessor.getCurveDb (i, side) + tilt * std::log2 (hz / 1000.0f);
+        dbs[(size_t) i] = curveDb (i, side) + tilt * std::log2 (hz / 1000.0f);
         pts[(size_t) i] = { freqToX (hz), juce::jmin (plot.getBottom(), dbToY (dbs[(size_t) i])) };
     }
 
@@ -511,6 +763,23 @@ void SpectrumView::drawCurve (juce::Graphics& g, bool side, float tilt, float re
 
     g.setColour ((side ? Palette::side : Palette::barOver).withAlpha (0.9f));
     g.strokePath (line, juce::PathStrokeType (1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Hold infinito: linea fina con el maximo de la curva en toda la cancion
+    if (audioProcessor.apvts.getRawParameterValue ("peakHold")->load() > 0.5f)
+    {
+        auto& holds = side ? curveHoldSide : curveHoldMid;
+        juce::Path maxLine;
+        for (int i = 0; i < P::numCurvePoints; ++i)
+        {
+            const float hz = P::getCurveFrequency (i);
+            if (! frozen)
+                holds[(size_t) i] = juce::jmax (holds[(size_t) i], curveDb (i, side));
+            const juce::Point<float> pt (freqToX (hz), juce::jmin (plot.getBottom(), dbToY (holds[(size_t) i] + tilt * std::log2 (hz / 1000.0f))));
+            if (i == 0) maxLine.startNewSubPath (pt); else maxLine.lineTo (pt);
+        }
+        g.setColour ((side ? Palette::side : Palette::text).withAlpha (0.55f));
+        g.strokePath (maxLine, juce::PathStrokeType (0.8f));
+    }
     g.restoreState();
 
     // "+dB" una vez por cada zona que pasa la referencia, en su punto mas alto

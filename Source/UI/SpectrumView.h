@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
+#include <optional>
 
 class BarSpectrumAnalyzerAudioProcessor;
 
@@ -27,8 +28,22 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
 
     static constexpr int numBars = 28;
+
+    void setFrozen (bool shouldFreeze);
+    void resetPeaks();
+
+    // Menu del engrane (el boton vive en la cabecera, junto al logo)
+    void showSettingsMenu (juce::Component& target);
+
+    // Para pruebas / capturas: posicion del mouse y zona de la grafica
+    void setHoverPosition (std::optional<juce::Point<float>> p) { hoverPos = p; }
+    juce::Rectangle<float> getPlotArea() const { return plotArea; }
 
 private:
     static juce::String frequencyLabel (float hz);
@@ -41,7 +56,14 @@ private:
     void drawReadouts (juce::Graphics&);
     void drawLevelMeter (juce::Graphics&);
     void drawCurve (juce::Graphics&, bool side, float tilt, float refDb);
-    void showSettingsMenu();
+    void drawHover (juce::Graphics&, float tilt, float refDb, bool showBars, bool showSide,
+                    float barWidth, float barGap);
+
+    // Datos que se dibujan: en vivo, o la foto tomada al congelar
+    float barDb (int i) const;
+    float sideBarDb (int i) const;
+    float curveDb (int i, bool side) const;
+    static juce::String noteName (float hz);
 
     BarSpectrumAnalyzerAudioProcessor& audioProcessor;
 
@@ -61,16 +83,22 @@ private:
     std::array<juce::TextButton, 2> styleButtons;
     std::unique_ptr<juce::ParameterAttachment> styleAttachment;
 
-    // Engrane: velocidad de la curva y rango vertical (cosas que no son
-    // del analisis del dia a dia, para no saturar la ventana)
-    GearButton settingsButton;
+    // Freeze: congela la grafica para estudiarla (los medidores siguen vivos)
+    juce::TextButton freezeButton { "Freeze" };
+    bool frozen = false;
+    std::array<float, numBars> frozenBars {}, frozenSideBars {};
+    std::vector<float> frozenCurveMid, frozenCurveSide;
+
+    // Lectura al pasar el mouse por la grafica
+    std::optional<juce::Point<float>> hoverPos;
 
     // Zonas calculadas en resized()
     juce::Rectangle<float> plotArea, readoutArea, meterArea, clipArea;
 
-    // Peak hold por barra (en la escala que se dibuja)
+    // Peak hold por barra y de la curva (nivel medido, sin tilt)
     std::array<float, numBars>  holdDb {};
     std::array<double, numBars> holdTime {};
+    std::vector<float> curveHoldMid, curveHoldSide;     // maximo de la curva (hold infinito)
 
     // Balistica del medidor
     std::array<float, 2> meterPeakDb { -100.0f, -100.0f };

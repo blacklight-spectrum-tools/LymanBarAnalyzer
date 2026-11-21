@@ -29,6 +29,9 @@ private:
     juce::TextButton phaseTab    { "Phase" };
     juce::TextButton masterTab   { "Master" };
 
+    // Engrane junto al logo: velocidad de la curva, rango vertical, peak hold
+    GearButton settingsButton;
+
     SpectrumView spectrumView;
     PhaseView    phaseView;
     MasterView   masterView;
