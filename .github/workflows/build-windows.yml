@@ -19,7 +19,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout (con JUCE)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -33,7 +33,7 @@ jobs:
           Write-Host "Version: $v"
 
       - name: Configurar (CMake)
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DLYMAN_COPY_AFTER_BUILD=OFF
+        run: cmake -S . -B build -A x64 -DLYMAN_COPY_AFTER_BUILD=OFF
 
       - name: Compilar VST3
         run: cmake --build build --config Release --target BarSpectrumAnalyzer_VST3 --parallel
