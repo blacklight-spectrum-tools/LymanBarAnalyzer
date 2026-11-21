@@ -24,7 +24,7 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
     holdTime.fill (0.0);
 
     referenceSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-    referenceSlider.setRange (minDb, maxDb, 0.1);
+    referenceSlider.setRange (-60.0, 0.0, 0.1);
     referenceSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, 22);
     addAndMakeVisible (referenceSlider);
 
@@ -103,6 +103,73 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
             *styleParam, [this] (float v) { setStyleButtons ((int) std::round (v)); });
         styleAttachment->sendInitialUpdate();
     }
+
+    settingsButton.setTooltip ("Settings: curve speed, vertical range");
+    settingsButton.onClick = [this] { showSettingsMenu(); };
+    addAndMakeVisible (settingsButton);
+}
+
+void GearButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    auto r = getLocalBounds().toFloat().reduced (3.0f);
+    const auto c = r.getCentre();
+    const float outer = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f;
+    const float inner = outer * 0.74f;
+    constexpr int teeth = 8;
+
+    juce::Path gear;
+    for (int k = 0; k < teeth; ++k)
+    {
+        const float a  = juce::MathConstants<float>::twoPi * (float) k / (float) teeth;
+        const float hw = juce::MathConstants<float>::pi / (float) teeth;
+        const float angles[] = { a - hw * 0.45f, a + hw * 0.45f, a + hw * 0.75f, a + 2.0f * hw - hw * 0.75f };
+        const float radii[]  = { outer, outer, inner, inner };
+        for (int i = 0; i < 4; ++i)
+        {
+            const juce::Point<float> pt (c.x + radii[i] * std::sin (angles[i]), c.y - radii[i] * std::cos (angles[i]));
+            if (k == 0 && i == 0) gear.startNewSubPath (pt); else gear.lineTo (pt);
+        }
+    }
+    gear.closeSubPath();
+    gear.addEllipse (c.x - outer * 0.32f, c.y - outer * 0.32f, outer * 0.64f, outer * 0.64f);
+    gear.setUsingNonZeroWinding (false);
+
+    g.setColour (down ? Palette::barOver : highlighted ? Palette::text : Palette::textDim);
+    g.fillPath (gear);
+}
+
+void SpectrumView::showSettingsMenu()
+{
+    auto& apvts = audioProcessor.apvts;
+    auto current = [&apvts] (const char* id) { return (int) std::round (apvts.getRawParameterValue (id)->load()); };
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader ("Curve speed (averaging)");
+    const char* speeds[] = { "Fast (0.25 s)", "Normal (1 s)", "Slow (3 s)" };
+    for (int i = 0; i < 3; ++i)
+        menu.addItem (1 + i, speeds[i], true, current ("curveSpeed") == i);
+
+    menu.addSectionHeader ("Vertical range");
+    const char* ranges[] = { "60 dB", "72 dB", "84 dB" };
+    for (int i = 0; i < 3; ++i)
+        menu.addItem (11 + i, ranges[i], true, current ("range") == i);
+
+    auto setChoice = [&apvts] (const char* id, int index)
+    {
+        if (auto* param = apvts.getParameter (id))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (param->convertTo0to1 ((float) index));
+            param->endChangeGesture();
+        }
+    };
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&settingsButton),
+                        [setChoice] (int result)
+                        {
+                            if (result >= 1 && result <= 3)        setChoice ("curveSpeed", result - 1);
+                            else if (result >= 11 && result <= 13) setChoice ("range", result - 11);
+                        });
 }
 
 void SpectrumView::setStyleButtons (int index)
@@ -174,6 +241,7 @@ void SpectrumView::resized()
     styleLabel.setBounds (row2.removeFromLeft (44));
     for (auto& b : styleButtons)
         b.setBounds (row2.removeFromLeft (54));
+    settingsButton.setBounds (row2.removeFromRight (26));
 
     area.removeFromTop (14);
 
@@ -210,6 +278,9 @@ void SpectrumView::paint (juce::Graphics& g)
     const auto plot = plotArea;
     const float barGap   = juce::jmax (1.0f, plot.getWidth() * 0.004f);
     const float barWidth = (plot.getWidth() - barGap * (float) (numBars - 1)) / (float) numBars;
+
+    static constexpr float ranges[] = { -60.0f, -72.0f, -84.0f };
+    minDb = ranges[juce::jlimit (0, 2, (int) std::round (audioProcessor.apvts.getRawParameterValue ("range")->load()))];
 
     const float refDb = audioProcessor.apvts.getRawParameterValue ("referenceDb")->load();
     const int   tiltIndex = juce::jlimit (0, 2, (int) std::round (audioProcessor.apvts.getRawParameterValue ("tilt")->load()));

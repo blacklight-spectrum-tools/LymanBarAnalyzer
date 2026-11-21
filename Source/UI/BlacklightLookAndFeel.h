@@ -24,5 +24,16 @@ public:
         setColour (juce::Slider::textBoxOutlineColourId,    Palette::grid);
 
         setColour (juce::Label::textColourId, Palette::text);
+
+        // Menu del engrane
+        setColour (juce::PopupMenu::backgroundColourId,            Palette::panel);
+        setColour (juce::PopupMenu::textColourId,                  Palette::text);
+        setColour (juce::PopupMenu::headerTextColourId,            Palette::textDim);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, Palette::grid);
+        setColour (juce::PopupMenu::highlightedTextColourId,       Palette::barOver);
+
+        setColour (juce::TooltipWindow::backgroundColourId, Palette::panel);
+        setColour (juce::TooltipWindow::textColourId,       Palette::text);
+        setColour (juce::TooltipWindow::outlineColourId,    Palette::grid);
     }
 };

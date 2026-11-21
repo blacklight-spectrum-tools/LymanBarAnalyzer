@@ -56,6 +56,35 @@ void BarSpectrumAnalyzerAudioProcessor::setupAnalysis (double sampleRate)
     blockReady = false;
 
     lowBank.prepare (currentSampleRate, bandEdgesHz.data(), numLowBands);
+
+    // Curva: FFT 8 veces mas grande que la de las barras. Se calcula cada ~86 ms
+    // (cada ~170 ms arriba de 66 kHz): con el promedio no se nota y ahorra CPU.
+    const int curveOrder = order + 3;
+    if (curveFft == nullptr || (1 << curveOrder) != curveFft->getSize())
+    {
+        curveFftSize = 1 << curveOrder;
+        curveFft     = std::make_unique<juce::dsp::FFT> (curveOrder);
+        curveWindow  = std::make_unique<juce::dsp::WindowingFunction<float>> ((size_t) curveFftSize, juce::dsp::WindowingFunction<float>::hann);
+    }
+    curveEvery = currentSampleRate > 66000.0 ? 4 : 2;
+
+    // Ventana de cada punto de la curva (~1/24 de octava), en divisiones
+    const double curveBin = currentSampleRate / (double) curveFftSize;
+    const int    lastCurveBin = curveFftSize / 2 - 1;
+    for (int p = 0; p < numCurvePoints; ++p)
+    {
+        const double f = getCurveFrequency (p);
+        curveLoBin[(size_t) p] = juce::jlimit (2, lastCurveBin - 1, (int) std::ceil  (f * std::pow (2.0, -1.0 / 48.0) / curveBin));
+        curveHiBin[(size_t) p] = juce::jlimit (2, lastCurveBin - 1, (int) std::floor (f * std::pow (2.0,  1.0 / 48.0) / curveBin));
+        curvePos[(size_t) p]   = juce::jlimit (2.0, (double) lastCurveBin - 1.0, f / curveBin);
+    }
+    for (auto& r : curveRing)
+        r.assign ((size_t) curveFftSize, 0.0f);
+    curveData.assign ((size_t) curveFftSize * 2, 0.0f);
+    avgPowerMid.assign  ((size_t) curveFftSize / 2 + 1, 0.0f);
+    avgPowerSide.assign ((size_t) curveFftSize / 2 + 1, 0.0f);
+    curveWrite = curveFrameCounter = 0;
+    curveActive = false;
 }
 
 BarSpectrumAnalyzerAudioProcessor::~BarSpectrumAnalyzerAudioProcessor() {}
@@ -82,6 +111,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout BarSpectrumAnalyzerAudioProc
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "style", 1 }, "Style",
         juce::StringArray { "Bars", "Curve" }, 0));
+
+    // Promedio de la curva (como el "Avg time" de SPAN). Las barras no se
+    // promedian: siguen mostrando los golpes tal cual para decidir.
+    params.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "curveSpeed", 1 }, "Curve speed",
+        juce::StringArray { "Fast", "Normal", "Slow" }, 1));
+
+    // Rango vertical de la grafica (0 dB arriba)
+    params.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "range", 1 }, "Range",
+        juce::StringArray { "60 dB", "72 dB", "84 dB" }, 0));
     return { params.begin(), params.end() };
 }
 
@@ -112,11 +152,23 @@ void BarSpectrumAnalyzerAudioProcessor::pushSamplesForFFT (float mid, float side
     midChannel.fifo[(size_t) fifoIndex]  = mid;
     sideChannel.fifo[(size_t) fifoIndex] = side;
     ++fifoIndex;
+
+    curveRing[0][(size_t) curveWrite] = mid;
+    curveRing[1][(size_t) curveWrite] = side;
+    if (++curveWrite == curveFftSize)
+        curveWrite = 0;
+}
+
+float BarSpectrumAnalyzerAudioProcessor::averagingCoefficient (int hopSamples) const
+{
+    // Constante de tiempo del promedio: Fast 0.25 s, Normal 1 s, Slow 3 s
+    static constexpr double tau[] = { 0.25, 1.0, 3.0 };
+    const int speed = juce::jlimit (0, 2, (int) std::round (apvts.getRawParameterValue ("curveSpeed")->load()));
+    return (float) (1.0 - std::exp (-(double) hopSamples / (tau[speed] * currentSampleRate)));
 }
 
 void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lowChannel,
-                                                     std::array<std::atomic<float>, numBars>& levels,
-                                                     std::array<std::atomic<float>, numCurvePoints>& curve)
+                                                     std::array<std::atomic<float>, numBars>& levels)
 {
     auto& data = ch.data;
     window->multiplyWithWindowingTable (data.data(), (size_t) fftSize);
@@ -135,8 +187,6 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lo
     // de su nivel: la barra caia entre golpes y no alcanzaba a subir.)
     const float attack  = 1.0f;
     const float release = 0.15f;
-
-    std::array<float, numBars> rawDb {};   // nivel de cada banda antes del suavizado
 
     for (int barIdx = 0; barIdx < numBars; ++barIdx)
     {
@@ -182,73 +232,106 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lo
             }
         }
 
-        rawDb[(size_t) barIdx] = db;
-
         float prev   = levels[(size_t) barIdx].load();
         float coeff  = (db > prev) ? attack : release;
         float smooth = prev + coeff * (db - prev);
         levels[(size_t) barIdx].store (smooth);
     }
 
-    // --- Vista en curva -------------------------------------------------------
-    // Graves (debajo de lowSplitHz): se interpola entre los centros de las
-    // bandas del banco de filtros. Arriba: el maximo de la FFT en una ventana
-    // de 1/12 de octava alrededor de cada punto (o interpolacion entre cajones
-    // cuando la ventana es mas angosta que un cajon).
-    auto bandCentre = [this] (int i) { return std::sqrt ((double) bandEdgesHz[(size_t) i] * (double) bandEdgesHz[(size_t) i + 1]); };
+}
 
-    auto fftDbAt = [&] (double f) -> float
+void BarSpectrumAnalyzerAudioProcessor::computeCurveSpectrum (bool restart)
+{
+    // restart: la curva estaba apagada -> se arranca con el cuadro actual
+    // en vez de mezclar con un promedio viejo.
+    const float alpha = restart ? 1.0f : averagingCoefficient (fftSize * curveEvery);
+
+    for (int c = 0; c < 2; ++c)
     {
-        const double lo = f * std::pow (2.0, -1.0 / 24.0), hi = f * std::pow (2.0, 1.0 / 24.0);
-        const int b0 = juce::jlimit (1, lastBin, (int) std::ceil  (lo / binWidth));
-        const int b1 = juce::jlimit (1, lastBin, (int) std::floor (hi / binWidth));
-        if (b1 >= b0)
+        // La historia del anillo en orden (la muestra mas vieja primero), sin
+        // su promedio (el DC no debe colarse en los graves de la curva)
+        const auto& ring = curveRing[(size_t) c];
+        const int older = curveFftSize - curveWrite;
+        std::copy (ring.begin() + curveWrite, ring.end(), curveData.begin());
+        std::copy (ring.begin(), ring.begin() + curveWrite, curveData.begin() + older);
+        double mean = 0.0;
+        for (int i = 0; i < curveFftSize; ++i)
+            mean += curveData[(size_t) i];
+        mean /= (double) curveFftSize;
+        for (int i = 0; i < curveFftSize; ++i)
+            curveData[(size_t) i] -= (float) mean;
+        std::fill (curveData.begin() + curveFftSize, curveData.end(), 0.0f);
+
+        curveWindow->multiplyWithWindowingTable (curveData.data(), (size_t) curveFftSize);
+        curveFft->performFrequencyOnlyForwardTransform (curveData.data());
+
+        auto& avgPower = c == 0 ? avgPowerMid : avgPowerSide;
+        for (int bin = 0; bin <= curveFftSize / 2; ++bin)
         {
-            float peak = 0.0f;
-            for (int bin = b0; bin <= b1; ++bin) peak = juce::jmax (peak, data[(size_t) bin]);
-            return juce::Decibels::gainToDecibels (peak * scale, -100.0f);
+            float& avg = avgPower[(size_t) bin];
+            const float pw = curveData[(size_t) bin] * curveData[(size_t) bin];
+            avg += alpha * (pw - avg);
+            if (avg < 1.0e-20f) avg = 0.0f;
         }
-        const double pos = juce::jlimit (1.0, (double) lastBin, f / binWidth);
-        const int    k   = juce::jlimit (1, lastBin - 1, (int) std::floor (pos));
-        const float  a   = juce::Decibels::gainToDecibels (data[(size_t) k] * scale, -100.0f);
-        const float  c   = juce::Decibels::gainToDecibels (data[(size_t) k + 1] * scale, -100.0f);
-        return a + (c - a) * (float) (pos - k);
-    };
+
+        computeCurve (avgPower, c == 0 ? curveMid : curveSide);
+    }
+}
+
+void BarSpectrumAnalyzerAudioProcessor::computeCurve (const std::vector<float>& avgPower,
+                                                      std::array<std::atomic<float>, numCurvePoints>& curve)
+{
+    // Cada punto toma el maximo del espectro promediado en una ventana del
+    // ancho de un punto (~1/24 de octava), con interpolacion parabolica para
+    // que un tono entre dos divisiones lea su nivel real. Si la ventana es
+    // mas angosta que una division (graves), se evalua la parabola que pasa
+    // por las tres divisiones mas cercanas.
+    // Calibracion: igual que las barras, un seno de X dBFS lee X dB.
+    const int    lastBin  = curveFftSize / 2 - 1;
+    const float  scale2   = (2.0f / (float) curveFftSize) * (2.0f / (float) curveFftSize);
+    auto dbOf = [&] (int k) { return 10.0f * std::log10 (juce::jmax (1.0e-10f, avgPower[(size_t) k] * scale2)); };
 
     for (int p = 0; p < numCurvePoints; ++p)
     {
-        const double f = getCurveFrequency (p);
+        const int b0 = curveLoBin[(size_t) p], b1 = curveHiBin[(size_t) p];
         float db;
 
-        if (numLowBands > 0 && f < lowSplitHz)
+        if (b1 >= b0)
         {
-            const double lastLow = bandCentre (numLowBands - 1);
-            if (f <= bandCentre (0))
+            int best = b0;
+            for (int bin = b0 + 1; bin <= b1; ++bin)
+                if (avgPower[(size_t) bin] > avgPower[(size_t) best]) best = bin;
+
+            db = dbOf (best);
+            const float a = dbOf (best - 1), c = dbOf (best + 1), den = a - 2.0f * db + c;
+            if (a <= db && c <= db && den < 0.0f)
             {
-                db = rawDb[0];
-            }
-            else if (f >= lastLow)
-            {
-                // Puente entre el ultimo filtro y la FFT
-                const double t = std::log (f / lastLow) / std::log ((double) lowSplitHz / lastLow);
-                db = rawDb[(size_t) numLowBands - 1] + (float) t * (fftDbAt (lowSplitHz) - rawDb[(size_t) numLowBands - 1]);
-            }
-            else
-            {
-                int i = 0;
-                while (i < numLowBands - 2 && f > bandCentre (i + 1)) ++i;
-                const double t = std::log (f / bandCentre (i)) / std::log (bandCentre (i + 1) / bandCentre (i));
-                db = rawDb[(size_t) i] + (float) t * (rawDb[(size_t) i + 1] - rawDb[(size_t) i]);
+                const float off = juce::jlimit (-0.5f, 0.5f, 0.5f * (a - c) / den);
+                db -= 0.25f * (a - c) * off;
             }
         }
         else
         {
-            db = fftDbAt (f);
+            // Entre dos divisiones: linea recta en dB, y cerca de un maximo
+            // la parabola de ese maximo (asi el pico de una nota queda en su
+            // frecuencia y nivel reales, sin inventar picos al lado).
+            const double pos = curvePos[(size_t) p];
+            const int    k0  = juce::jlimit (2, lastBin - 2, (int) std::floor (pos));
+            const float  y0 = dbOf (k0), y1 = dbOf (k0 + 1);
+            db = y0 + (y1 - y0) * (float) (pos - k0);
+
+            for (int m : { k0, k0 + 1 })
+            {
+                const float a = dbOf (m - 1), b = dbOf (m), c = dbOf (m + 1), den = a - 2.0f * b + c;
+                if (a <= b && c <= b && den < 0.0f)
+                {
+                    const float d = (float) (pos - m);
+                    db = juce::jmax (db, b + 0.5f * d * (c - a) + 0.5f * d * d * den);
+                }
+            }
         }
 
-        float prev   = curve[(size_t) p].load();
-        float coeff  = (db > prev) ? attack : release;
-        curve[(size_t) p].store (prev + coeff * (db - prev));
+        curve[(size_t) p].store (juce::jmax (-100.0f, db));
     }
 }
 
@@ -310,9 +393,23 @@ void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float*
 
     if (blockReady)
     {
-        computeBars (midChannel, 0, barLevels, curveMid);
-        computeBars (sideChannel, 1, sideLevels, curveSide);
+        computeBars (midChannel, 0, barLevels);
+        computeBars (sideChannel, 1, sideLevels);
         blockReady = false;
+
+        // La curva solo se calcula si hay una ventana abierta en estilo Curve
+        const bool wantCurve = editorsOpen.load() > 0
+                            && apvts.getRawParameterValue ("style")->load() > 0.5f;
+        if (wantCurve && ++curveFrameCounter >= curveEvery)
+        {
+            curveFrameCounter = 0;
+            computeCurveSpectrum (! curveActive);
+            curveActive = true;
+        }
+        else if (! wantCurve)
+        {
+            curveActive = false;
+        }
     }
 
     phaseAnalyzer.process (left, right, numSamples);

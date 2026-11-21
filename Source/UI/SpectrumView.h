@@ -4,6 +4,15 @@
 
 class BarSpectrumAnalyzerAudioProcessor;
 
+/** Boton de engrane (configuracion): dibujado a mano, sin depender de fuentes. */
+class GearButton : public juce::Button
+{
+public:
+    GearButton() : juce::Button ("Settings") {}
+
+    void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
+};
+
 /**
     Pestana "Spectrum": barras por banda, linea de referencia de compresion,
     inclinacion (tilt), dB por encima de la referencia, peak hold por barra
@@ -32,6 +41,7 @@ private:
     void drawReadouts (juce::Graphics&);
     void drawLevelMeter (juce::Graphics&);
     void drawCurve (juce::Graphics&, bool side, float tilt, float refDb);
+    void showSettingsMenu();
 
     BarSpectrumAnalyzerAudioProcessor& audioProcessor;
 
@@ -51,6 +61,10 @@ private:
     std::array<juce::TextButton, 2> styleButtons;
     std::unique_ptr<juce::ParameterAttachment> styleAttachment;
 
+    // Engrane: velocidad de la curva y rango vertical (cosas que no son
+    // del analisis del dia a dia, para no saturar la ventana)
+    GearButton settingsButton;
+
     // Zonas calculadas en resized()
     juce::Rectangle<float> plotArea, readoutArea, meterArea, clipArea;
 
@@ -65,7 +79,7 @@ private:
     double lastPaintMs = 0.0;
     float  frameDt = 0.0f;
 
-    static constexpr float minDb = -60.0f;
+    float minDb = -60.0f;                    // fondo de la grafica (parametro "range")
     static constexpr float maxDb = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumView)

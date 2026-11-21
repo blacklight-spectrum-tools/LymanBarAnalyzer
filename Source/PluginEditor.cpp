@@ -20,6 +20,7 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
       masterView (p)
 {
     setLookAndFeel (&lookAndFeel);
+    ++audioProcessor.editorsOpen;
 
     // Pestanas: botones que se comportan como grupo de radio
     int index = 0;
@@ -59,6 +60,7 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
 BarSpectrumAnalyzerAudioProcessorEditor::~BarSpectrumAnalyzerAudioProcessorEditor()
 {
     stopTimer();
+    --audioProcessor.editorsOpen;
     setLookAndFeel (nullptr);
 }
 

@@ -12,6 +12,9 @@ checks phase, stereo width and loudness for streaming.
 It never touches the audio: it is a meter only, fully transparent to the
 signal.
 
+**Free. Really.** No trial, no account, no expiry. What's free today stays
+free.
+
 ## Download
 
 **[Download the latest version (Windows installer)](https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer/releases/latest)**

@@ -11,6 +11,9 @@ ecualizar. También revisa fase, ancho estéreo y volumen para streaming.
 
 No modifica el audio: es solo un medidor, transparente en la señal.
 
+**Gratis de verdad.** Sin demo, sin cuenta, sin caducidad. Lo que hoy es
+gratis se queda gratis.
+
 ## Descargar
 
 **[Descarga la versión más reciente (instalador para Windows)](https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer/releases/latest)**

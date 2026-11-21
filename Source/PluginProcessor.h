@@ -24,7 +24,7 @@ class BarSpectrumAnalyzerAudioProcessor : public juce::AudioProcessor
 public:
     static constexpr int   numBars    = 28;          // cantidad de barras mostradas
     static constexpr float lowSplitHz = 240.0f;      // debajo: banco de filtros; arriba: FFT
-    static constexpr int   numCurvePoints = 120;     // puntos de la vista en curva (20 Hz a 20 kHz)
+    static constexpr int   numCurvePoints = 240;     // puntos de la vista en curva (20 Hz a 20 kHz, ~1/24 oct)
 
     BarSpectrumAnalyzerAudioProcessor();
     ~BarSpectrumAnalyzerAudioProcessor() override;
@@ -75,6 +75,9 @@ public:
     // Pestana abierta la ultima vez (para que el editor la recuerde al reabrirse)
     std::atomic<int> lastTab { 0 };
 
+    // Ventanas abiertas (la curva solo se calcula si alguien la esta viendo)
+    std::atomic<int> editorsOpen { 0 };
+
 private:
     struct SpectrumChannel
     {
@@ -84,8 +87,10 @@ private:
 
     void pushSamplesForFFT (float mid, float side);
     void analyse (const float* left, const float* right, int numChannels, int numSamples);
-    void computeBars (SpectrumChannel&, int lowChannel, std::array<std::atomic<float>, numBars>& levels,
-                      std::array<std::atomic<float>, numCurvePoints>& curve);
+    void computeBars (SpectrumChannel&, int lowChannel, std::array<std::atomic<float>, numBars>& levels);
+    void computeCurveSpectrum (bool restart);
+    void computeCurve (const std::vector<float>& avgPower, std::array<std::atomic<float>, numCurvePoints>& curve);
+    float averagingCoefficient (int hopSamples) const;
     void setupAnalysis (double sampleRate);
 
     // El tamano de la FFT crece con la frecuencia de muestreo (2048 a 44.1/48 kHz,
@@ -101,6 +106,24 @@ private:
     SpectrumChannel midChannel, sideChannel;   // Mid = (L+R)/2, Side = (L-R)/2
     int  fifoIndex  = 0;
     bool blockReady = false;
+
+    // Vista en curva: su propia FFT, 8 veces mas grande que la de las barras
+    // (16384 a 44.1/48 kHz -> divisiones de ~2.9 Hz, ventana de ~340 ms), con
+    // el espectro PROMEDIADO en energia (como SPAN) para que la forma se vea
+    // estable. Una sola FFT para toda la curva: sin costuras entre graves y
+    // agudos. Solo se calcula mientras alguien ve la curva (ahorra CPU).
+    int curveFftSize = 16384;
+    int curveEvery = 1;                                  // cada cuantos bloques de barras
+    int curveFrameCounter = 0;
+    bool curveActive = false;
+    std::unique_ptr<juce::dsp::FFT> curveFft;
+    std::unique_ptr<juce::dsp::WindowingFunction<float>> curveWindow;
+    std::array<std::vector<float>, 2> curveRing;         // historia (Mid, Side)
+    std::vector<float> curveData;                        // buffer de trabajo
+    std::vector<float> avgPowerMid, avgPowerSide;
+    int curveWrite = 0;
+    std::array<int, numCurvePoints>    curveLoBin {}, curveHiBin {};   // ventana de cada punto
+    std::array<double, numCurvePoints> curvePos {};                    // posicion exacta (en divisiones)
 
     std::array<float, numBars + 1>          bandEdgesHz {};   // limites de cada banda en Hz
     std::array<std::atomic<float>, numBars> barLevels;        // nivel suavizado en dB por barra (Mid)

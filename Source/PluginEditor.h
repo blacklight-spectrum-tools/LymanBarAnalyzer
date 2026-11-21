@@ -33,6 +33,8 @@ private:
     PhaseView    phaseView;
     MasterView   masterView;
 
+    juce::TooltipWindow tooltipWindow { this, 700 };   // ayudas al pasar el mouse
+
     int currentTab = 0;
     bool dcShown = false;          // aviso de DC offset en la cabecera
     juce::Rectangle<int> dcArea;
