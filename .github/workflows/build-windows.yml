@@ -38,4 +38,27 @@ jobs:
       - name: Compilar VST3
         run: cmake --build build --config Release --target BarSpectrumAnalyzer_VST3 --parallel
 
-      -
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Armar instalador
+        shell: pwsh
+        run: |
+          $vst3 = Resolve-Path "build/BarSpectrumAnalyzer_artefacts/Release/VST3/Lyman Bar Analyzer.vst3"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.version.outputs.version }}" "/DSourceVst3=$vst3" installer\LymanBarAnalyzer.iss
+          Compress-Archive -Path $vst3 -DestinationPath "installer/Output/Lyman-Bar-Analyzer-${{ steps.version.outputs.version }}-Windows-VST3.zip"
+          Get-ChildItem installer/Output
+
+      - name: Guardar para descargar
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lyman-Bar-Analyzer-${{ steps.version.outputs.version }}-Windows
+          path: installer/Output/*
+
+      - name: Publicar Release (solo con tag)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/*
+          draft: true
+          generate_release_notes: false
