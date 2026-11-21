@@ -1,0 +1,41 @@
+# Compila Lyman Bar Analyzer (VST3, Windows) y arma el instalador .exe.
+#  - Manual: pestana "Actions" -> "Build Windows" -> "Run workflow".
+#    El instalador queda para descargar en la ejecucion (Artifacts).
+#  - Al subir un tag de version (git tag v1.3 && git push origin v1.3):
+#    ademas crea la Release en GitHub con el instalador y el .vst3 en zip.
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout (con JUCE)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") { $v = $env:GITHUB_REF_NAME.TrimStart("v") }
+          else { $v = (Select-String -Path CMakeLists.txt -Pattern 'project\(\S+ VERSION ([0-9.]+)\)').Matches[0].Groups[1].Value + "-dev" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      - name: Configurar (CMake)
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DLYMAN_COPY_AFTER_BUILD=OFF
+
+      - name: Compilar VST3
+        run: cmake --build build --config Release --target BarSpectrumAnalyzer_VST3 --parallel
+
+      -
