@@ -129,7 +129,7 @@ versión sale cuando está probada en mezclas reales.
       toda la canción)
 - [x] Lectura al pasar el mouse: frecuencia, nota musical, nivel, distancia a la
       referencia y veredicto Mid/Side por frecuencia
-- [ ] Botón de escucha Mono / Side / Mid (se mantiene presionado; se apaga solo
+- [x] Botón de escucha Mono / Side (se mantiene presionado; se apaga solo
       al exportar)
 - [ ] Aviso de fase por banda en la vista M/S
 - [ ] Zonas por instrumento (por ejemplo voz: cuerpo, presencia, sibilancia,

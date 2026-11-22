@@ -122,6 +122,9 @@ private:
     std::vector<float> curveData;                        // buffer de trabajo
     std::vector<float> avgPowerMid, avgPowerSide;
     int curveWrite = 0;
+
+    float listenGain = 0.0f, listenStep = 0.001f;
+    bool  listenSide = false;           // modo que esta sonando (cambia sin clic)
     std::array<int, numCurvePoints>    curveLoBin {}, curveHiBin {};   // ventana de cada punto
     std::array<double, numCurvePoints> curvePos {};                    // posicion exacta (en divisiones)
 

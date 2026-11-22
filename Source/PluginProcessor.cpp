@@ -128,6 +128,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout BarSpectrumAnalyzerAudioProc
     params.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "peakHold", 1 }, "Peak hold",
         juce::StringArray { "Normal", "Infinite" }, 0));
+
+    // Boton de escucha: la UNICA funcion que toca el audio, y solo para
+    // escuchar. "Listen" se puede ligar a un pad MIDI (en FL: Link to
+    // controller). Nunca se guarda encendido y se apaga solo al exportar.
+    params.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "listen", 1 }, "Listen", false));
+    params.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "listenMode", 1 }, "Listen mode",
+        juce::StringArray { "Mono", "Side" }, 0));
     return { params.begin(), params.end() };
 }
 
@@ -138,6 +147,10 @@ void BarSpectrumAnalyzerAudioProcessor::prepareToPlay (double sampleRate, int)
     stereoAnalyzer.prepare (sampleRate);
     levelMeter.prepare (sampleRate);
     truePeak.prepare (sampleRate);
+
+    // Fundido de ~15 ms al prender/apagar la escucha (sin clics)
+    listenGain = 0.0f;
+    listenStep = (float) (1.0 / (0.015 * sampleRate));
 }
 
 void BarSpectrumAnalyzerAudioProcessor::pushSamplesForFFT (float mid, float side)
@@ -383,8 +396,33 @@ void BarSpectrumAnalyzerAudioProcessor::processBlock (juce::AudioBuffer<float>& 
         }
     }
 
-    // El audio sale exactamente igual que entro: este plugin es solo
-    // de referencia/medicion, no procesa la senal.
+    // El analisis siempre mide la senal tal como entro. El audio sale igual,
+    // salvo mientras el boton de escucha esta presionado (Mono o Side), y
+    // nunca al exportar: en render offline la senal pasa intacta.
+    const bool wantListen = apvts.getRawParameterValue ("listen")->load() > 0.5f && ! isNonRealtime();
+    const bool wantSide   = apvts.getRawParameterValue ("listenMode")->load() > 0.5f;
+    if (isNonRealtime())
+        listenGain = 0.0f;
+    if (listenGain <= 0.0f)
+        listenSide = wantSide;          // el modo solo cambia con la escucha apagada
+    // Si cambian Mono <-> Side mientras se escucha: baja, cambia y vuelve a subir
+    const float target = (wantListen && wantSide == listenSide) ? 1.0f : 0.0f;
+
+    if (numCh >= 2 && (listenGain > 0.0f || wantListen))
+    {
+        const bool side = listenSide;
+        float* l = buffer.getWritePointer (0);
+        float* r = buffer.getWritePointer (1);
+        for (int s = 0; s < numSamples; ++s)
+        {
+            listenGain = target > listenGain ? juce::jmin (target, listenGain + listenStep)
+                                             : juce::jmax (target, listenGain - listenStep);
+            // Mono = Mid: (L+R)/2 en las dos bocinas. Side: (L-R)/2 en las dos.
+            const float mono = side ? 0.5f * (l[s] - r[s]) : 0.5f * (l[s] + r[s]);
+            l[s] += listenGain * (mono - l[s]);
+            r[s] += listenGain * (mono - r[s]);
+        }
+    }
 }
 
 void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float* right, int numChannels, int numSamples)
@@ -434,6 +472,12 @@ juce::AudioProcessorEditor* BarSpectrumAnalyzerAudioProcessor::createEditor()
 void BarSpectrumAnalyzerAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+
+    // La escucha nunca se guarda encendida: al abrir el proyecto suena normal
+    for (auto child : state)
+        if (child.getProperty ("id").toString() == "listen")
+            child.setProperty ("value", 0.0f, nullptr);
+
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
 }
@@ -443,6 +487,9 @@ void BarSpectrumAnalyzerAudioProcessor::setStateInformation (const void* data, i
     std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
     if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
+
+    if (auto* listen = apvts.getParameter ("listen"))
+        listen->setValueNotifyingHost (0.0f);
 }
 
 // Requerido por JUCE para instanciar el plugin

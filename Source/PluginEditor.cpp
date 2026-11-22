@@ -15,6 +15,7 @@ namespace
 BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor (BarSpectrumAnalyzerAudioProcessor& p)
     : AudioProcessorEditor (&p),
       audioProcessor (p),
+      listenButton (p.apvts),
       spectrumView (p),
       phaseView (p),
       masterView (p)
@@ -40,6 +41,7 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
     settingsButton.setTooltip ("Settings: curve speed, vertical range, peak hold");
     settingsButton.onClick = [this] { spectrumView.showSettingsMenu (settingsButton); };
     addAndMakeVisible (settingsButton);
+    addAndMakeVisible (listenButton);
 
     addChildComponent (spectrumView);
     addChildComponent (phaseView);
@@ -89,6 +91,14 @@ void BarSpectrumAnalyzerAudioProcessorEditor::timerCallback()
     else if (currentTab == 1) phaseView.repaint();
     else                      masterView.repaint();
 
+    // Boton de escucha (puede prenderlo un pad MIDI) y su aviso grande
+    listenButton.refresh();
+    if (listenButton.isOn() != listenShown)
+    {
+        listenShown = listenButton.isOn();
+        repaint();
+    }
+
     // Aviso de DC offset en la cabecera (visible en cualquier pestana)
     const bool dc = audioProcessor.getLevelMeter().getDcOffset() > LevelMeter::dcWarnLevel;
     if (dc != dcShown)
@@ -112,9 +122,12 @@ void BarSpectrumAnalyzerAudioProcessorEditor::resized()
     header.removeFromLeft (6);
     masterTab.setBounds (header.removeFromLeft (tabW));
     header.removeFromLeft (12);
-    header.removeFromRight (200);                   // logo
+    compactLogo = getWidth() < 760;
+    header.removeFromRight (compactLogo ? 60 : 200); // logo
     settingsButton.setBounds (header.removeFromRight (28).withSizeKeepingCentre (28, 28));
-    header.removeFromRight (8);
+    header.removeFromRight (6);
+    listenButton.setBounds (header.removeFromRight (60).withSizeKeepingCentre (60, 26));
+    header.removeFromRight (10);
     dcArea = header.withSizeKeepingCentre (juce::jmin (header.getWidth(), 210), header.getHeight());
 
     spectrumView.setBounds (area);
@@ -131,17 +144,25 @@ void BarSpectrumAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
     // Logo a la derecha de la cabecera: marca + "BLACKLIGHT / SPECTRUM TOOLS"
     auto header = getLocalBounds().removeFromTop (headerHeight).toFloat().reduced (16.0f, 8.0f);
+    if (compactLogo)
+    {
+        Logo::drawMark (g, header.removeFromRight (48.0f).withSizeKeepingCentre (48.0f, 18.0f), Palette::barOver);
+    }
     auto text   = header.removeFromRight (128.0f);
     header.removeFromRight (10.0f);
-    Logo::drawMark (g, header.removeFromRight (48.0f).withSizeKeepingCentre (48.0f, 18.0f), Palette::barOver);
+    if (! compactLogo)
+        Logo::drawMark (g, header.removeFromRight (48.0f).withSizeKeepingCentre (48.0f, 18.0f), Palette::barOver);
 
-    g.setColour (Palette::text);
-    g.setFont (juce::FontOptions (14.0f, juce::Font::bold).withKerningFactor (0.14f));
-    g.drawText ("BLACKLIGHT", text.removeFromTop (17.0f), juce::Justification::bottomLeft);
+    if (! compactLogo)
+    {
+        g.setColour (Palette::text);
+        g.setFont (juce::FontOptions (14.0f, juce::Font::bold).withKerningFactor (0.14f));
+        g.drawText ("BLACKLIGHT", text.removeFromTop (17.0f), juce::Justification::bottomLeft);
 
-    g.setColour (Palette::textDim);
-    g.setFont (juce::FontOptions (9.0f).withKerningFactor (0.28f));
-    g.drawText ("SPECTRUM TOOLS", text, juce::Justification::topLeft);
+        g.setColour (Palette::textDim);
+        g.setFont (juce::FontOptions (9.0f).withKerningFactor (0.28f));
+        g.drawText ("SPECTRUM TOOLS", text, juce::Justification::topLeft);
+    }
 
     g.setColour (Palette::panel);
     g.fillRect (0, headerHeight - 1, getWidth(), 1);
@@ -159,4 +180,22 @@ void BarSpectrumAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
         g.drawFittedText (dcArea.getWidth() > 170 ? "DC OFFSET - high-pass at ~20 Hz" : "DC OFFSET",
                           pill.toNearestInt(), juce::Justification::centred, 1);
     }
+}
+
+void BarSpectrumAnalyzerAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+{
+    // Aviso grande mientras se escucha en Mono / Side: es lo unico que cambia
+    // el sonido, tiene que ser imposible no verlo.
+    if (! listenButton.isOn())
+        return;
+
+    const juce::String text = listenButton.isSideMode() ? "SIDE ONLY - listening only, turns off on export"
+                                                        : "MONO CHECK - listening only, turns off on export";
+    g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+    const float w = juce::jmin ((float) getWidth() - 40.0f, 380.0f);
+    const auto pill = juce::Rectangle<float> (((float) getWidth() - w) * 0.5f, (float) getHeight() - 30.0f, w, 22.0f);
+    g.setColour (Palette::warn);
+    g.fillRoundedRectangle (pill, 11.0f);
+    g.setColour (Palette::background);
+    g.drawFittedText (text, pill.toNearestInt(), juce::Justification::centred, 1);
 }

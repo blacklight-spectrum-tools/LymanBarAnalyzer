@@ -215,6 +215,10 @@ void SpectrumView::showSettingsMenu (juce::Component& target)
     for (int i = 0; i < 3; ++i)
         menu.addItem (11 + i, ranges[i], true, current ("range") == i);
 
+    menu.addSectionHeader ("Listen button (hold to listen)");
+    menu.addItem (31, "Mono", true, current ("listenMode") == 0);
+    menu.addItem (32, "Side only", true, current ("listenMode") == 1);
+
     menu.addSectionHeader ("Peak hold");
     menu.addItem (21, "Normal (1 s)", true, current ("peakHold") == 0);
     menu.addItem (22, "Infinite (whole song)", true, current ("peakHold") == 1);
@@ -242,6 +246,7 @@ void SpectrumView::showSettingsMenu (juce::Component& target)
                                 if (safeThis != nullptr) safeThis->resetPeaks();
                             }
                             else if (result == 23 && safeThis != nullptr) safeThis->resetPeaks();
+                            else if (result == 31 || result == 32)       setChoice ("listenMode", result - 31);
                         });
 }
 

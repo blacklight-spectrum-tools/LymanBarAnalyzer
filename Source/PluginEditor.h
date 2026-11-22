@@ -5,6 +5,7 @@
 #include "UI/SpectrumView.h"
 #include "UI/PhaseView.h"
 #include "UI/MasterView.h"
+#include "UI/ListenButton.h"
 
 class BarSpectrumAnalyzerAudioProcessorEditor : public juce::AudioProcessorEditor,
                                                  private juce::Timer
@@ -14,6 +15,7 @@ public:
     ~BarSpectrumAnalyzerAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
 
 private:
@@ -32,6 +34,10 @@ private:
     // Engrane junto al logo: velocidad de la curva, rango vertical, peak hold
     GearButton settingsButton;
 
+    // Escucha Mono / Side (mantener presionado). Unico control que toca el audio.
+    ListenButton listenButton;
+    bool listenShown = false;
+
     SpectrumView spectrumView;
     PhaseView    phaseView;
     MasterView   masterView;
@@ -41,6 +47,7 @@ private:
     int currentTab = 0;
     bool dcShown = false;          // aviso de DC offset en la cabecera
     juce::Rectangle<int> dcArea;
+    bool compactLogo = false;      // ventanas chicas: solo la marca, sin texto
 
     static constexpr int headerHeight = 44;
 

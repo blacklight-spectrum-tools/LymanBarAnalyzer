@@ -123,7 +123,7 @@ ships when it is tested in real mixes.
 - [x] Freeze and infinite peak hold (the loudest each band got in the whole song)
 - [x] Hover readout: frequency, musical note, level, distance to the reference,
       and Mid/Side verdict per frequency
-- [ ] Mono / Side / Mid listen button (hold to listen; turns itself off on export)
+- [x] Mono / Side listen button (hold to listen; turns itself off on export)
 - [ ] Per-band phase warning in M/S view
 - [ ] Instrument zones (e.g. voice: body, presence, sibilance, air)
 - [ ] Master tab aware of the channel it is on (streaming table only on the master)
