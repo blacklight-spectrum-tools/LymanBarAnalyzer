@@ -37,13 +37,13 @@ and can be removed from Windows Settings → Apps.
 Prefer to copy it yourself? Each release also has a `.zip` with the
 `.vst3` folder.
 
-![Spectrum tab, bars in M/S view: bars above the reference light up and show by how many dB; Side in cyan](docs/images/spectrum.png)
+![Spectrum tab, bars in M/S view with Guide on: bars above the reference light up and show by how many dB, Side in cyan, mix zones above the graph](docs/images/spectrum.png)
 
 ![Spectrum tab, curve style in M/S view: Mid in purple, Side as a cyan shadow](docs/images/spectrum-curve.png)
 
 ![Phase tab: goniometer, phase correlation, low end mono check and L/R balance](docs/images/phase.png)
 
-![Master tab: integrated loudness, True Peak, PLR and what each streaming platform does with your level](docs/images/master.png)
+![Master tab on the master: integrated loudness, True Peak, PLR and what each streaming platform does with your level](docs/images/master.png)
 
 **New in 1.5**
 
@@ -51,19 +51,21 @@ Prefer to copy it yourself? Each release also has a `.zip` with the
 
 ![On a channel the Master tab becomes Loudness: no streaming table, headroom and dynamics for that element instead](docs/images/loudness-channel.png)
 
+![MONO listen button locked: yellow frame around the window and MONO CHECK in place of the logo; exports are never affected](docs/images/mono.png)
+
 ![Redesigned settings menu: curve speed, range, peak hold, listen mode, colour themes and large readings](docs/images/settings-menu.png)
 
 ![Graphite theme: neutral grey for long sessions, with the brand lilac only where it matters](docs/images/graphite.png)
 
-**New in 1.4**
+**More**
+
+![Hover readout in M/S: how far Side is from Mid at that frequency and what it means](docs/images/ms-hover.png)
 
 ![Hover readout on a frozen curve: the kick at 60.2 Hz, its musical note and how far it is from the reference](docs/images/spectrum-hover.png)
 
 ![Per-band phase warning: red marks on the bands that would cancel when summed to mono, with what to check](docs/images/phase-warning.png)
 
 ![Curve in M/S with infinite peak hold: the thin lines are the loudest each frequency got in the whole song](docs/images/curve-hold.png)
-
-![MONO listen button locked: the button turns yellow and a warning appears; exports are never affected](docs/images/mono.png)
 
 ## Compatibility
 

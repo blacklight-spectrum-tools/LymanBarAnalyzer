@@ -38,13 +38,13 @@ Configuración de Windows → Aplicaciones.
 ¿Prefieres copiarlo tú? Cada versión trae también un `.zip` con la carpeta
 `.vst3`.
 
-![Pestaña Spectrum, barras en vista M/S: las barras que pasan la referencia se iluminan y dicen por cuántos dB; Side en cian](docs/images/spectrum.png)
+![Pestaña Spectrum, barras en vista M/S con Guide prendido: las barras que pasan la referencia se iluminan y dicen por cuántos dB, Side en cian, zonas de la mezcla arriba de la gráfica](docs/images/spectrum.png)
 
 ![Pestaña Spectrum, estilo curva en vista M/S: Mid en morado, Side como sombra cian](docs/images/spectrum-curve.png)
 
 ![Pestaña Phase: goniómetro, correlación de fase, revisión de graves en mono y balance L/R](docs/images/phase.png)
 
-![Pestaña Master: sonoridad integrada, True Peak, PLR y qué hace cada plataforma de streaming con tu nivel](docs/images/master.png)
+![Pestaña Master en el master: sonoridad integrada, True Peak, PLR y qué hace cada plataforma de streaming con tu nivel](docs/images/master.png)
 
 **Nuevo en la 1.5**
 
@@ -52,19 +52,21 @@ Configuración de Windows → Aplicaciones.
 
 ![En un canal la pestaña Master se vuelve Loudness: sin tabla de streaming, con margen y dinámica de ese elemento](docs/images/loudness-channel.png)
 
+![Botón de escucha MONO fijo: marco amarillo alrededor de la ventana y MONO CHECK en lugar del logo; los exports nunca se afectan](docs/images/mono.png)
+
 ![Menú de configuración rediseñado: velocidad de la curva, rango, peak hold, modo de escucha, temas de color y lecturas grandes](docs/images/settings-menu.png)
 
 ![Tema Graphite: gris neutro para sesiones largas, con el lila de la marca solo donde importa](docs/images/graphite.png)
 
-**Nuevo en la 1.4**
+**Más**
+
+![Lectura con el mouse en M/S: cuánto está el Side del Mid en esa frecuencia y qué significa](docs/images/ms-hover.png)
 
 ![Lectura con el mouse sobre la curva congelada: el kick en 60.2 Hz, su nota musical y qué tan lejos está de la referencia](docs/images/spectrum-hover.png)
 
 ![Aviso de fase por banda: marcas rojas en las bandas que se cancelarían al sumar a mono, con qué revisar](docs/images/phase-warning.png)
 
 ![Curva en M/S con hold infinito: las líneas finas son lo más fuerte que llegó cada frecuencia en toda la canción](docs/images/curve-hold.png)
-
-![Botón de escucha MONO fijo: el botón se pone amarillo y aparece un aviso; los exports nunca se afectan](docs/images/mono.png)
 
 ## Compatibilidad
 
