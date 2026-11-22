@@ -9,7 +9,9 @@ frecuencia en **barras** (como un EQ gráfico) o en una **curva** detallada,
 para ver qué bandas sobresalen y por cuánto, y decidir qué comprimir o
 ecualizar. También revisa fase, ancho estéreo y volumen para streaming.
 
-No modifica el audio: es solo un medidor, transparente en la señal.
+Nunca cambia tu mezcla: es un medidor. El único control que toca el audio
+es el botón de escucha Mono / Side, que solo funciona mientras escuchas y
+se apaga solo al exportar.
 
 **Gratis de verdad.** Sin demo, sin cuenta, sin caducidad. Lo que hoy es
 gratis se queda gratis.
@@ -56,13 +58,24 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
 - Resolución real en graves: debajo de 240 Hz cada barra tiene su propio
   filtro, así que las bandas vecinas quedan 38 dB separadas. El kick y el
   bajo caen en barras distintas.
-- Estilo **Barras o Curva**. La curva tiene 120 puntos (como 1/12 de
-  octava) para ver resonancias angostas; lo que pasa la referencia se
-  resalta.
+- Estilo **Barras o Curva**. Las barras reaccionan al instante (para
+  decidir); la curva se promedia como SPAN (para comparar), con 240 puntos
+  y resolución de ~3 Hz en graves, así las notas del kick y del bajo salen
+  como picos separados. Velocidad de la curva: Fast / Normal / Slow.
 - Línea de referencia de compresión: lo que la pasa se ilumina y muestra
   cuántos dB la rebasa (por ejemplo `+3.2`), el dato que necesitas para el
   umbral.
-- Peak hold en cada barra.
+- Peak hold en cada barra: normal (baja después de 1 s) o **infinito** (lo
+  más fuerte que llegó cada banda en toda la canción; doble clic para
+  reiniciar).
+- **Freeze** para congelar la gráfica y estudiarla (los medidores siguen).
+- **Lectura al pasar el mouse:** frecuencia, nota musical (por ejemplo
+  `52 Hz · G#1 +3¢`), nivel y distancia a la referencia. En M/S también dice
+  cuánto está el Side del Mid y qué significa (casi mono, estéreo, muy
+  abierto o riesgo de cancelación).
+- **Aviso de fase por banda:** marca roja en las bandas que se cancelarían
+  al sumar a mono, con qué revisar (polaridad, retraso L/R, ensanchador).
+  Ajustado para no saltar con estéreo normal (reverbs, pads).
 - Tilt (0 / 3 / 4.5 dB por octava) para juzgar el balance tonal. Usa 0
   para poner el umbral de un compresor.
 - Medidor de nivel L/R con zonas de intensidad (-12, -6 y -1 dB), lecturas
@@ -70,6 +83,8 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
   (clic para apagarla).
 - Vista Sum o M/S: en M/S el canal Side se dibuja en cian, para ver qué
   frecuencias están abiertas y cuáles en el centro.
+- Rango vertical de 60 / 72 / 84 dB, en el menú de configuración (engrane
+  junto al logo).
 
 **Pestaña Phase**
 - Goniómetro con escala Auto o Level (el borde es 0 dBFS).
@@ -93,7 +108,14 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
 - Qué harían Spotify, YouTube, Apple Music, Amazon / TIDAL y Deezer con tu
   nivel.
 
-**En cualquier pestaña:** aviso de DC offset en la cabecera.
+**En cualquier pestaña:**
+- **Botón de escucha MONO / SIDE** en la cabecera: mantenlo presionado para
+  escuchar, suéltalo para volver a estéreo; clic derecho (o Shift + clic)
+  para dejarlo fijo. Se puede ligar a un pad MIDI (en FL Studio: clic
+  derecho en el parámetro "Listen" → Link to controller). Nunca se queda
+  prendido: el proyecto siempre abre en estéreo y los exports no se
+  afectan.
+- Aviso de DC offset en la cabecera.
 
 La ventana se puede redimensionar y recuerda su tamaño y la última pestaña
 abierta.
@@ -120,7 +142,7 @@ abierta.
 Todo lo de esta lista es para la versión **gratuita**. Sin fechas: cada
 versión sale cuando está probada en mezclas reales.
 
-**Próxima versión (1.4) — en curso**
+**1.4 — publicada**
 
 - [x] Curva más estable y con más detalle: promediada como SPAN, resolución de
       ~3 Hz en graves (las notas del kick y del bajo salen como picos separados)
@@ -133,6 +155,9 @@ versión sale cuando está probada en mezclas reales.
       al exportar)
 - [x] Aviso de fase por banda (marca roja donde una banda se cancelaría en
       mono)
+
+**Próxima versión (1.5) — en curso**
+
 - [ ] Zonas por instrumento (por ejemplo voz: cuerpo, presencia, sibilancia,
       aire)
 - [ ] Pestaña Master que sabe en qué canal está (tabla de streaming solo en el
@@ -140,6 +165,7 @@ versión sale cuando está probada en mezclas reales.
 - [ ] Modo de lecturas grandes para grabar pantalla y dar clases
 - [ ] Modos de color: grafito neutro (descansa la vista en sesiones largas),
       atenuado y para daltonismo
+- [ ] Menú de configuración y textos de ayuda rediseñados
 
 **Más adelante**
 

@@ -9,8 +9,9 @@ A reference spectrum analyzer that shows energy per frequency band as
 bands stand out and by how much, and decide what to compress or EQ. It also
 checks phase, stereo width and loudness for streaming.
 
-It never touches the audio: it is a meter only, fully transparent to the
-signal.
+It never changes your mix: it is a meter. The only control that touches
+the audio is the Mono / Side listen button, which only works while you
+listen and turns itself off on export.
 
 **Free. Really.** No trial, no account, no expiry. What's free today stays
 free.
@@ -55,18 +56,31 @@ are planned.
   at -20 dBFS reads -20 in its bar.
 - Real low-end resolution: below 240 Hz each bar has its own filter, so
   neighbouring bands are 38 dB apart. Kick and bass land in different bars.
-- **Bars or Curve** style. The curve has 120 points (about 1/12 octave) to
-  show narrow resonances; whatever goes above the reference is highlighted.
+- **Bars or Curve** style. Bars react instantly (to decide); the curve is
+  averaged like SPAN (to compare), with 240 points and ~3 Hz resolution in
+  the low end, so kick and bass notes show as separate peaks. Curve speed:
+  Fast / Normal / Slow.
 - Compression reference line: whatever goes above it lights up and shows by
   how many dB it exceeds it (e.g. `+3.2`), the number you need for the
   threshold.
-- Peak hold on every bar.
+- Peak hold on every bar: normal (falls after 1 s) or **infinite** (the
+  loudest each band got in the whole song; double-click to reset).
+- **Freeze** the display to study it (meters keep running).
+- **Hover readout:** frequency, musical note (e.g. `52 Hz · G#1 +3¢`),
+  level and distance to the reference. In M/S it also tells you how far
+  Side is from Mid and what that means (mostly mono, stereo, wide, or
+  phase cancellation risk).
+- **Per-band phase warning:** a red mark on any band that would cancel when
+  summed to mono, with what to check (polarity, L/R delay, widener). Tuned
+  not to fire on normal stereo (reverbs, pads).
 - Tilt (0 / 3 / 4.5 dB per octave) to judge tonal balance. Use 0 when
   setting a compressor threshold.
 - L/R level meter with intensity zones (-12, -6 and -1 dB), Peak, RMS and
   short-term LUFS readouts, plus a latching CLIP light (click to reset).
 - Sum or M/S view: in M/S the Side channel is drawn in cyan, so you can see
   which frequencies are wide and which sit in the center.
+- Vertical range 60 / 72 / 84 dB, in the settings menu (gear next to the
+  logo).
 
 **Phase tab**
 - Goniometer with Auto scale or Level scale (the edge is 0 dBFS).
@@ -90,7 +104,13 @@ are planned.
 - What Spotify, YouTube, Apple Music, Amazon / TIDAL and Deezer would do
   with your level.
 
-**Anywhere:** a DC offset warning in the header.
+**Anywhere:**
+- **MONO / SIDE listen button** in the header: hold it to listen, release to
+  go back to stereo; right-click (or Shift+click) to lock it. It can be
+  linked to a MIDI pad (in FL Studio: right-click the "Listen" parameter →
+  Link to controller). It never stays on: a project always opens in stereo,
+  and exports are never affected.
+- A DC offset warning in the header.
 
 The window is resizable and remembers its size and last open tab.
 
@@ -115,7 +135,7 @@ The window is resizable and remembers its size and last open tab.
 Everything below is planned for the **free** version. No dates: each release
 ships when it is tested in real mixes.
 
-**Next release (1.4) — in progress**
+**1.4 — released**
 
 - [x] Smoother, more detailed curve: averaged like SPAN, ~3 Hz resolution in the
       low end (kick and bass notes show as separate peaks)
@@ -125,11 +145,15 @@ ships when it is tested in real mixes.
       and Mid/Side verdict per frequency
 - [x] Mono / Side listen button (hold to listen; turns itself off on export)
 - [x] Per-band phase warning (red mark where a band would cancel in mono)
+
+**Next release (1.5) — in progress**
+
 - [ ] Instrument zones (e.g. voice: body, presence, sibilance, air)
 - [ ] Master tab aware of the channel it is on (streaming table only on the master)
 - [ ] Large readings mode for screen recording and teaching
 - [ ] Colour modes: neutral graphite (easy on the eyes in long sessions), dim
       and colour-blind friendly
+- [ ] Redesigned settings menu and tooltips
 
 **Later**
 
