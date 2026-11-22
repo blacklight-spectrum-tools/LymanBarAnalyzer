@@ -63,6 +63,8 @@ private:
     float barDb (int i) const;
     float sideBarDb (int i) const;
     float curveDb (int i, bool side) const;
+    bool  phaseRisk (int i) const;
+    int   bandAt (float hz) const;
     static juce::String noteName (float hz);
 
     BarSpectrumAnalyzerAudioProcessor& audioProcessor;
@@ -87,6 +89,7 @@ private:
     juce::TextButton freezeButton { "Freeze" };
     bool frozen = false;
     std::array<float, numBars> frozenBars {}, frozenSideBars {};
+    std::array<bool, numBars>  frozenPhaseRisk {};
     std::vector<float> frozenCurveMid, frozenCurveSide;
 
     // Lectura al pasar el mouse por la grafica

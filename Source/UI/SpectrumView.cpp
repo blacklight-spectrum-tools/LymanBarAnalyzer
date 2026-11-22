@@ -123,6 +123,7 @@ void SpectrumView::setFrozen (bool shouldFreeze)
         {
             frozenBars[(size_t) i]     = audioProcessor.getBarLevelDb (i);
             frozenSideBars[(size_t) i] = audioProcessor.getSideLevelDb (i);
+            frozenPhaseRisk[(size_t) i] = audioProcessor.isBandPhaseRisk (i);
         }
         for (int i = 0; i < P::numCurvePoints; ++i)
         {
@@ -150,6 +151,16 @@ void SpectrumView::resetPeaks()
 
 float SpectrumView::barDb (int i) const     { return frozen ? frozenBars[(size_t) i]     : audioProcessor.getBarLevelDb (i); }
 float SpectrumView::sideBarDb (int i) const { return frozen ? frozenSideBars[(size_t) i] : audioProcessor.getSideLevelDb (i); }
+bool SpectrumView::phaseRisk (int i) const { return frozen ? frozenPhaseRisk[(size_t) i] : audioProcessor.isBandPhaseRisk (i); }
+
+int SpectrumView::bandAt (float hz) const
+{
+    for (int i = 0; i < numBars; ++i)
+        if (hz < audioProcessor.getBandFrequency (i + 1))
+            return i;
+    return numBars - 1;
+}
+
 float SpectrumView::curveDb (int i, bool side) const
 {
     if (frozen)
@@ -486,6 +497,17 @@ void SpectrumView::paint (juce::Graphics& g)
             }
         }
 
+        // Fase por banda: punto rojo arriba de todo lo de esta barra
+        if (phaseRisk (i))
+        {
+            float yTop = juce::jmin (top, dbToY (holdShown));
+            if (showSide)
+                yTop = juce::jmin (yTop, dbToY (sideBarDb (i) + tiltOff));
+            const float dotY = juce::jmax (plot.getY() + 5.0f, yTop - (over ? 24.0f : 9.0f));
+            g.setColour (Palette::danger);
+            g.fillEllipse (x + barWidth * 0.5f - 3.5f, dotY - 3.5f, 7.0f, 7.0f);
+        }
+
         // Cuantos dB pasa la referencia (el dato para el threshold del compresor)
         if (over)
         {
@@ -542,6 +564,27 @@ void SpectrumView::paint (juce::Graphics& g)
         g.setColour (Palette::side);
         g.fillRect (legend.getX() + 56.0f, legend.getCentreY() - 4.0f, 8.0f, 8.0f);
         g.drawText ("SIDE", legend.withTrimmedLeft (68.0f), juce::Justification::centredLeft);
+    }
+
+    // Fase por banda: tira roja sobre el eje en las bandas que se cancelarian
+    // en mono (en barras y en curva, en Sum y en M/S)
+    for (int i = 0; i < numBars; ++i)
+    {
+        if (! phaseRisk (i))
+            continue;
+        float x0, x1;
+        if (showBars)
+        {
+            x0 = plot.getX() + (float) i * (barWidth + barGap);
+            x1 = x0 + barWidth;
+        }
+        else
+        {
+            x0 = freqToX (audioProcessor.getBandFrequency (i));
+            x1 = freqToX (audioProcessor.getBandFrequency (i + 1));
+        }
+        g.setColour (Palette::danger);
+        g.fillRect (juce::Rectangle<float> (x0, plot.getBottom() - 4.0f, x1 - x0, 4.0f));
     }
 
     // Congelado: aviso en la esquina de la grafica
@@ -655,6 +698,16 @@ void SpectrumView::drawHover (juce::Graphics& g, float tilt, float refDb, bool s
         else                                         { verdict = "Phase cancellation risk";  verdictColour = Palette::danger; }
     }
 
+    // Banda marcada por el aviso de fase: veredicto sostenido + que revisar
+    const int   hoverBand = showBars ? juce::jlimit (0, numBars - 1, (int) ((hoverPos->x - plot.getX()) / (barWidth + barGap)))
+                                     : bandAt (20.0f * std::pow (1000.0f, juce::jlimit (0.0f, 1.0f, (hoverPos->x - plot.getX()) / plot.getWidth())));
+    const bool  bandRisk  = phaseRisk (hoverBand);
+    if (bandRisk)
+    {
+        verdict = "Phase cancellation risk";
+        verdictColour = Palette::danger;
+    }
+
     juce::String refLine;
     if (midShown > -99.0f)
     {
@@ -666,8 +719,9 @@ void SpectrumView::drawHover (juce::Graphics& g, float tilt, float refDb, bool s
 
     // Cuadro junto al cursor, siempre dentro de la grafica
     g.setFont (juce::FontOptions (11.5f));
-    const int rows = lines.size() + (refLine.isNotEmpty() ? 1 : 0) + (gapLine.isNotEmpty() ? 2 : 0);
-    const float w = gapLine.isNotEmpty() ? 172.0f : 150.0f, h = 8.0f + 15.0f * (float) rows;
+    const int rows = lines.size() + (refLine.isNotEmpty() ? 1 : 0) + (gapLine.isNotEmpty() ? 1 : 0)
+                   + (verdict.isNotEmpty() ? 1 : 0) + (bandRisk ? 1 : 0);
+    const float w = (gapLine.isNotEmpty() || bandRisk) ? 212.0f : 150.0f, h = 8.0f + 15.0f * (float) rows;
     float bx = hoverPos->x + 14.0f, by = hoverPos->y + 14.0f;
     if (bx + w > plot.getRight()) bx = hoverPos->x - 14.0f - w;
     if (by + h > plot.getBottom()) by = hoverPos->y - 14.0f - h;
@@ -691,8 +745,17 @@ void SpectrumView::drawHover (juce::Graphics& g, float tilt, float refDb, bool s
         g.setColour (Palette::text);
         g.drawText (gapLine, row, juce::Justification::centredLeft);
         row.translate (0.0f, 15.0f);
+    }
+    if (verdict.isNotEmpty())
+    {
         g.setColour (verdictColour);
         g.drawText (verdict, row, juce::Justification::centredLeft);
+        row.translate (0.0f, 15.0f);
+    }
+    if (bandRisk)
+    {
+        g.setColour (Palette::textDim);
+        g.drawText ("Check: polarity, L/R delay, widener", row, juce::Justification::centredLeft);
         row.translate (0.0f, 15.0f);
     }
     if (refLine.isNotEmpty())

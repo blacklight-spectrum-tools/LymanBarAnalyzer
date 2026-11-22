@@ -57,6 +57,10 @@ void BarSpectrumAnalyzerAudioProcessor::setupAnalysis (double sampleRate)
 
     lowBank.prepare (currentSampleRate, bandEdgesHz.data(), numLowBands);
 
+    phaseMidPow.fill (0.0f); phaseSidePow.fill (0.0f);
+    phaseOnTime.fill (0.0f); phaseOffTime.fill (0.0f);
+    for (auto& r : phaseRisk) r.store (false);
+
     // Curva: FFT 8 veces mas grande que la de las barras. Se calcula cada ~86 ms
     // (cada ~170 ms arriba de 66 kHz): con el promedio no se nota y ahorra CPU.
     const int curveOrder = order + 3;
@@ -259,6 +263,63 @@ void BarSpectrumAnalyzerAudioProcessor::computeBars (SpectrumChannel& ch, int lo
 
 }
 
+void BarSpectrumAnalyzerAudioProcessor::updatePhaseRisk()
+{
+    // En una banda, Mid^2 - Side^2 = L*R: con las dos potencias sale la
+    // correlacion de esa zona. Riesgo = correlacion < -0.3 (el mismo rojo de
+    // la pestana Phase), sostenido y con energia que de verdad se perderia.
+    //  - Promedio por banda de al menos 1 s y de 40 / ancho de banda: las
+    //    bandas graves son angostas y necesitan mas tiempo para que el ruido
+    //    estereo normal (reverbs, pads) no parezca desfase.
+    //  - Prende si el promedio Y la lectura reciente estan en rojo 0.5 s;
+    //    apaga si la lectura reciente sale del rojo 1 s (no espera al promedio).
+    const float dt = (float) fftSize / (float) currentSampleRate;
+    auto pw = [] (float db) { return db <= -99.0f ? 0.0f : std::pow (10.0f, db / 10.0f); };
+
+    float loudest = 0.0f;
+    for (int i = 0; i < numBars; ++i)
+    {
+        const float bw    = juce::jmax (1.0f, bandEdgesHz[(size_t) i + 1] - bandEdgesHz[(size_t) i]);
+        const float tau   = juce::jmax (1.0f, 40.0f / bw);
+        const float alpha = 1.0f - std::exp (-dt / tau);
+        phaseMidPow[(size_t) i]  += alpha * (pw (barLevels[(size_t) i].load())  - phaseMidPow[(size_t) i]);
+        phaseSidePow[(size_t) i] += alpha * (pw (sideLevels[(size_t) i].load()) - phaseSidePow[(size_t) i]);
+        loudest = juce::jmax (loudest, phaseMidPow[(size_t) i] + phaseSidePow[(size_t) i]);
+    }
+
+    for (int i = 0; i < numBars; ++i)
+    {
+        const float m = phaseMidPow[(size_t) i], s = phaseSidePow[(size_t) i], total = m + s;
+        // Con energia: arriba de -50 dB y a menos de 40 dB de la banda mas fuerte
+        const bool  energetic = total > 1.0e-5f && total > loudest * 1.0e-4f;
+        const float corrAvg = total > 0.0f ? (m - s) / total : 1.0f;
+
+        const float mNow = pw (barLevels[(size_t) i].load()), sNow = pw (sideLevels[(size_t) i].load());
+        const float corrNow = mNow + sNow > 0.0f ? (mNow - sNow) / (mNow + sNow) : 1.0f;
+
+        const bool on = phaseRisk[(size_t) i].load();
+        if (! on)
+        {
+            const bool red = energetic && corrAvg < PhaseAnalyzer::dangerBelow && corrNow < PhaseAnalyzer::dangerBelow;
+            phaseOnTime[(size_t) i] = red ? phaseOnTime[(size_t) i] + dt : 0.0f;
+            if (phaseOnTime[(size_t) i] >= 0.5f) { phaseRisk[(size_t) i].store (true); phaseOffTime[(size_t) i] = 0.0f; }
+        }
+        else
+        {
+            const bool clear = ! energetic || corrNow > PhaseAnalyzer::dangerBelow + 0.1f;
+            phaseOffTime[(size_t) i] = clear ? phaseOffTime[(size_t) i] + dt : 0.0f;
+            if (phaseOffTime[(size_t) i] >= 1.0f)
+            {
+                phaseRisk[(size_t) i].store (false);
+                phaseOnTime[(size_t) i] = 0.0f;
+                // Que el promedio viejo no lo vuelva a prender
+                phaseMidPow[(size_t) i]  = mNow;
+                phaseSidePow[(size_t) i] = sNow;
+            }
+        }
+    }
+}
+
 void BarSpectrumAnalyzerAudioProcessor::computeCurveSpectrum (bool restart)
 {
     // restart: la curva estaba apagada -> se arranca con el cuadro actual
@@ -439,6 +500,7 @@ void BarSpectrumAnalyzerAudioProcessor::analyse (const float* left, const float*
     {
         computeBars (midChannel, 0, barLevels);
         computeBars (sideChannel, 1, sideLevels);
+        updatePhaseRisk();
         blockReady = false;
 
         // La curva solo se calcula si hay una ventana abierta en estilo Curve

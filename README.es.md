@@ -131,7 +131,8 @@ versión sale cuando está probada en mezclas reales.
       referencia y veredicto Mid/Side por frecuencia
 - [x] Botón de escucha Mono / Side (se mantiene presionado; se apaga solo
       al exportar)
-- [ ] Aviso de fase por banda en la vista M/S
+- [x] Aviso de fase por banda (marca roja donde una banda se cancelaría en
+      mono)
 - [ ] Zonas por instrumento (por ejemplo voz: cuerpo, presencia, sibilancia,
       aire)
 - [ ] Pestaña Master que sabe en qué canal está (tabla de streaming solo en el

@@ -124,7 +124,7 @@ ships when it is tested in real mixes.
 - [x] Hover readout: frequency, musical note, level, distance to the reference,
       and Mid/Side verdict per frequency
 - [x] Mono / Side listen button (hold to listen; turns itself off on export)
-- [ ] Per-band phase warning in M/S view
+- [x] Per-band phase warning (red mark where a band would cancel in mono)
 - [ ] Instrument zones (e.g. voice: body, presence, sibilance, air)
 - [ ] Master tab aware of the channel it is on (streaming table only on the master)
 - [ ] Large readings mode for screen recording and teaching

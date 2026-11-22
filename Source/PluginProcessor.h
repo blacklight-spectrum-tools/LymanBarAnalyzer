@@ -56,6 +56,10 @@ public:
     float getSideLevelDb (int barIndex) const { return sideLevels[(size_t) barIndex].load(); }
     float getBandFrequency (int edgeIndex) const { return bandEdgesHz[(size_t) edgeIndex]; }
 
+    // Aviso de fase por banda: true si esa banda se cancelaria en mono
+    // (Side mas fuerte que Mid de forma sostenida, con energia real)
+    bool  isBandPhaseRisk (int barIndex) const   { return phaseRisk[(size_t) barIndex].load(); }
+
     // Vista en curva: mas puntos que las barras (1/12 de octava aprox.)
     float getCurveDb (int point, bool side) const
     {
@@ -88,6 +92,7 @@ private:
     void pushSamplesForFFT (float mid, float side);
     void analyse (const float* left, const float* right, int numChannels, int numSamples);
     void computeBars (SpectrumChannel&, int lowChannel, std::array<std::atomic<float>, numBars>& levels);
+    void updatePhaseRisk();
     void computeCurveSpectrum (bool restart);
     void computeCurve (const std::vector<float>& avgPower, std::array<std::atomic<float>, numCurvePoints>& curve);
     float averagingCoefficient (int hopSamples) const;
@@ -131,6 +136,11 @@ private:
     std::array<float, numBars + 1>          bandEdgesHz {};   // limites de cada banda en Hz
     std::array<std::atomic<float>, numBars> barLevels;        // nivel suavizado en dB por barra (Mid)
     std::array<std::atomic<float>, numBars> sideLevels;       // lo mismo para el canal Side
+
+    // Fase por banda: potencias Mid/Side promediadas (~1 s) y estado con
+    // histeresis (tarda 0.5 s en prender y 1 s en apagar, sin parpadeo)
+    std::array<float, numBars> phaseMidPow {}, phaseSidePow {}, phaseOnTime {}, phaseOffTime {};
+    std::array<std::atomic<bool>, numBars> phaseRisk {};
     std::array<std::atomic<float>, numCurvePoints> curveMid, curveSide;
 
     PhaseAnalyzer phaseAnalyzer;
