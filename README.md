@@ -40,6 +40,16 @@ Prefer to copy it yourself? Each release also has a `.zip` with the
 
 ![Master tab: integrated loudness, True Peak, PLR and what each streaming platform does with your level](docs/images/master.png)
 
+**New in 1.4**
+
+![Hover readout on a frozen curve: the kick at 60.2 Hz, its musical note and how far it is from the reference](docs/images/spectrum-hover.png)
+
+![Per-band phase warning: red marks on the bands that would cancel when summed to mono, with what to check](docs/images/phase-warning.png)
+
+![Curve in M/S with infinite peak hold: the thin lines are the loudest each frequency got in the whole song](docs/images/curve-hold.png)
+
+![MONO listen button locked: the button turns yellow and a warning appears; exports are never affected](docs/images/mono.png)
+
 ## Compatibility
 
 VST3 plugin for **Windows**, compatible with any DAW that loads VST3

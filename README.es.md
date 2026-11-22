@@ -41,6 +41,16 @@ Configuración de Windows → Aplicaciones.
 
 ![Pestaña Master: sonoridad integrada, True Peak, PLR y qué hace cada plataforma de streaming con tu nivel](docs/images/master.png)
 
+**Nuevo en la 1.4**
+
+![Lectura con el mouse sobre la curva congelada: el kick en 60.2 Hz, su nota musical y qué tan lejos está de la referencia](docs/images/spectrum-hover.png)
+
+![Aviso de fase por banda: marcas rojas en las bandas que se cancelarían al sumar a mono, con qué revisar](docs/images/phase-warning.png)
+
+![Curva en M/S con hold infinito: las líneas finas son lo más fuerte que llegó cada frecuencia en toda la canción](docs/images/curve-hold.png)
+
+![Botón de escucha MONO fijo: el botón se pone amarillo y aparece un aviso; los exports nunca se afectan](docs/images/mono.png)
+
 ## Compatibilidad
 
 Plugin VST3 para **Windows**, compatible con cualquier DAW que cargue
