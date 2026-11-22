@@ -1,6 +1,7 @@
 #include "MasterView.h"
 #include "../PluginProcessor.h"
 #include "../Palette.h"
+#include "BlacklightLookAndFeel.h"
 
 namespace
 {
@@ -18,16 +19,19 @@ namespace
         { "Deezer",         -15.0f, 2 },
     };
 
-    juce::Colour tpColour (float db)
+    // En el master el limite es -1 dBTP (streaming); en un canal se pide
+    // un poco mas de margen para que el master tenga espacio
+    juce::Colour tpColour (float db, bool onMaster)
     {
-        if (db > 0.0f)  return Palette::danger;
-        if (db > -1.0f) return Palette::warn;
+        if (db > 0.0f)                         return Palette::danger;
+        if (db > (onMaster ? -1.0f : -3.0f))   return Palette::warn;
         return Palette::ok;
     }
 }
 
 MasterView::MasterView (BarSpectrumAnalyzerAudioProcessor& p)
-    : level (p.getLevelMeter()),
+    : processor (p),
+      level (p.getLevelMeter()),
       truePeak (p.getTruePeakMeter())
 {
     resetButton.onClick = [this]
@@ -37,6 +41,53 @@ MasterView::MasterView (BarSpectrumAnalyzerAudioProcessor& p)
     };
     resetButton.setTooltip ("Restart Integrated, LRA, maximums, True Peak and clip count");
     addAndMakeVisible (resetButton);
+
+    // Donde esta Lyman: automatico (nombre de la pista) o a mano
+    roleLabel.setText ("ON", juce::dontSendNotification);
+    roleLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    roleLabel.setJustificationType (juce::Justification::centredRight);
+    ThemeStyle::dimLabel (roleLabel);
+    addAndMakeVisible (roleLabel);
+
+    int index = 0;
+    for (auto* b : { &roleAuto, &roleMaster, &roleChannel })
+    {
+        b->setClickingTogglesState (true);
+        b->setRadioGroupId (2001);
+        ThemeStyle::segment (*b);
+        b->setConnectedEdges ((index > 0 ? juce::Button::ConnectedOnLeft : 0)
+                            | (index < 2 ? juce::Button::ConnectedOnRight : 0));
+        b->onClick = [this, index]
+        {
+            processor.setTrackRole (index);
+            refreshRole();
+            repaint();
+        };
+        addAndMakeVisible (b);
+        ++index;
+    }
+    roleAuto.setTooltip ("Use the track name sent by the DAW (\"Master\" = master)");
+    roleMaster.setTooltip ("Lyman is on the master: show what streaming platforms do");
+    roleChannel.setTooltip ("Lyman is on a channel (vocal, beat, bus...): compare channels instead");
+
+    refreshRole();
+}
+
+void MasterView::refreshRole()
+{
+    master    = processor.isOnMaster();
+    trackName = processor.getTrackName();
+
+    const int role = processor.getTrackRole();
+    roleAuto.setToggleState    (role == BarSpectrumAnalyzerAudioProcessor::roleAuto,    juce::dontSendNotification);
+    roleMaster.setToggleState  (role == BarSpectrumAnalyzerAudioProcessor::roleMaster,  juce::dontSendNotification);
+    roleChannel.setToggleState (role == BarSpectrumAnalyzerAudioProcessor::roleChannel, juce::dontSendNotification);
+
+    // En automatico, el boton dice lo que se detecto
+    if (role == BarSpectrumAnalyzerAudioProcessor::roleAuto)
+        roleAuto.setButtonText (trackName.isEmpty() ? "Auto" : "Auto: " + juce::String (master ? "master" : "channel"));
+    else
+        roleAuto.setButtonText ("Auto");
 }
 
 juce::String MasterView::formatLufs (float v)
@@ -66,6 +117,16 @@ void MasterView::resized()
     right.removeFromTop (10.0f);
     plrArea    = right.removeFromTop (juce::jmin (84.0f, right.getHeight() * 0.3f));
     right.removeFromTop (12.0f);
+
+    // Abajo a la derecha: en que pista esta (Auto | Master | Channel)
+    auto roleRow = right.removeFromBottom (26.0f).toNearestInt();
+    right.removeFromBottom (8.0f);
+    const int segW = juce::jlimit (56, 104, (roleRow.getWidth() - 34) / 3);
+    for (auto* b : { &roleChannel, &roleMaster })
+        b->setBounds (roleRow.removeFromRight (segW));
+    roleAuto.setBounds (roleRow.removeFromRight (juce::jmin (roleRow.getWidth() - 30, segW + 30)));
+    roleLabel.setBounds (roleRow.removeFromRight (30));
+
     streamArea = right;
 }
 
@@ -75,7 +136,8 @@ void MasterView::paint (juce::Graphics& g)
     drawLoudness (g);
     drawTruePeak (g);
     drawPlr (g);
-    drawStreaming (g);
+    if (master) drawStreaming (g);
+    else        drawChannel (g);
 }
 
 void MasterView::drawLed (juce::Graphics& g, juce::Rectangle<float> row, juce::Colour c, const juce::String& text)
@@ -111,7 +173,7 @@ void MasterView::drawLoudness (juce::Graphics& g)
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
     g.drawText ("INTEGRATED", bigRow.removeFromTop (26.0f), juce::Justification::bottomLeft);
     g.setFont (juce::FontOptions (12.0f));
-    g.drawText ("whole song  " + formatTime (secs), bigRow, juce::Justification::topLeft);
+    g.drawText ((master ? "whole song  " : "since reset  ") + formatTime (secs), bigRow, juce::Justification::topLeft);
 
     // Escala con los objetivos de las plataformas
     a.removeFromTop (16.0f);
@@ -123,9 +185,12 @@ void MasterView::drawLoudness (juce::Graphics& g)
     g.setColour (Palette::panel);
     g.fillRoundedRectangle (bar, 3.0f);
 
-    // Zona "objetivo de streaming" (-16 a -14)
-    g.setColour (Palette::ok.withAlpha (0.22f));
-    g.fillRect (juce::Rectangle<float>::leftTopRightBottom (xFor (-16.0f), bar.getY(), xFor (-14.0f), bar.getBottom()));
+    // Zona "objetivo de streaming" (-16 a -14): solo tiene sentido en el master
+    if (master)
+    {
+        g.setColour (Palette::ok.withAlpha (0.22f));
+        g.fillRect (juce::Rectangle<float>::leftTopRightBottom (xFor (-16.0f), bar.getY(), xFor (-14.0f), bar.getBottom()));
+    }
 
     g.setFont (juce::FontOptions (10.0f));
     for (float t = scaleMin; t <= scaleMax + 0.01f; t += 2.0f)
@@ -139,8 +204,11 @@ void MasterView::drawLoudness (juce::Graphics& g)
         g.drawText (juce::String ((int) t), r, just);
     }
     g.setColour (Palette::textDim);
-    g.drawText ("Apple -16", juce::Rectangle<float> (xFor (-16.0f) - 60.0f, marks.getY(), 58.0f, marks.getHeight()), juce::Justification::centredRight);
-    g.drawText ("-14 Spotify / YouTube", juce::Rectangle<float> (xFor (-14.0f) + 2.0f, marks.getY(), 130.0f, marks.getHeight()), juce::Justification::centredLeft);
+    if (master)
+    {
+        g.drawText ("Apple -16", juce::Rectangle<float> (xFor (-16.0f) - 60.0f, marks.getY(), 58.0f, marks.getHeight()), juce::Justification::centredRight);
+        g.drawText ("-14 Spotify / YouTube", juce::Rectangle<float> (xFor (-14.0f) + 2.0f, marks.getY(), 130.0f, marks.getHeight()), juce::Justification::centredLeft);
+    }
 
     const float S = level.getLufsShort();
     if (S > scaleMin - 10.0f && S > -69.9f)
@@ -183,9 +251,12 @@ void MasterView::drawLoudness (juce::Graphics& g)
     {
         g.setColour (Palette::textDim);
         g.setFont (juce::FontOptions (11.5f));
-        g.drawFittedText ("Integrated is what streaming platforms use. Press Reset, then play "
-                          "the song from start to end.  LRA: how much the volume moves between "
-                          "soft and loud parts.",
+        g.drawFittedText (master ? "Integrated is what streaming platforms use. Press Reset, then play "
+                                   "the song from start to end.  LRA: how much the volume moves between "
+                                   "soft and loud parts."
+                                 : "On a channel, LUFS tells how loud this element is. Compare it with "
+                                   "other channels (vocal vs. beat), not with streaming targets.  LRA: "
+                                   "how much its volume moves.",
                           hint.removeFromTop (juce::jmin (hint.getHeight(), 48.0f)).toNearestInt(),
                           juce::Justification::topLeft, 3);
     }
@@ -203,7 +274,7 @@ void MasterView::drawTruePeak (juce::Graphics& g)
     a.removeFromTop (2.0f);
 
     auto row = a.removeFromTop (40.0f);
-    g.setColour (has ? tpColour (tp) : Palette::idle);
+    g.setColour (has ? tpColour (tp, master) : Palette::idle);
     g.setFont (juce::FontOptions (32.0f, juce::Font::bold));
     g.drawText (has ? (tp > 0.0f ? "+" : "") + juce::String (tp, 1) + " dBTP" : juce::String ("--"), row, juce::Justification::centredLeft);
 
@@ -214,10 +285,13 @@ void MasterView::drawTruePeak (juce::Graphics& g)
 
     a.removeFromTop (4.0f);
     auto led = a.removeFromTop (24.0f);
-    if (! has)            drawLed (g, led, Palette::idle,   "No signal");
-    else if (tp > 0.0f)   drawLed (g, led, Palette::danger, "Clipping - lower the limiter ceiling");
-    else if (tp > -1.0f)  drawLed (g, led, Palette::warn,   "Above -1 dBTP - may distort on streaming");
-    else                  drawLed (g, led, Palette::ok,     "Safe for streaming (below -1 dBTP)");
+    if (! has)                      drawLed (g, led, Palette::idle,   "No signal");
+    else if (master && tp > 0.0f)   drawLed (g, led, Palette::danger, "Clipping - lower the limiter ceiling");
+    else if (master && tp > -1.0f)  drawLed (g, led, Palette::warn,   "Above -1 dBTP - may distort on streaming");
+    else if (master)                drawLed (g, led, Palette::ok,     "Safe for streaming (below -1 dBTP)");
+    else if (tp > 0.0f)             drawLed (g, led, Palette::danger, "Over 0 dB - lower this channel");
+    else if (tp > -3.0f)            drawLed (g, led, Palette::warn,   "Little headroom on this channel");
+    else                            drawLed (g, led, Palette::ok,     "Headroom OK on this channel");
 }
 
 void MasterView::drawPlr (juce::Graphics& g)
@@ -241,6 +315,14 @@ void MasterView::drawPlr (juce::Graphics& g)
     a.removeFromTop (2.0f);
     auto led = a.removeFromTop (24.0f);
     if (! ok)             drawLed (g, led, Palette::idle,   "Play a few seconds");
+    else if (! master)
+    {
+        // En un canal no hay "bueno" o "malo": un bajo denso esta bien.
+        // Solo se describe, con el color neutro de la paleta.
+        drawLed (g, led, Palette::barNormal, plr >= 12.0f ? "Very dynamic (lots of transients)"
+                                           : plr >= 7.0f  ? "Moderately compressed"
+                                                          : "Very dense (heavily compressed)");
+    }
     else if (plr >= 9.0f) drawLed (g, led, Palette::ok,     "Healthy dynamics");
     else if (plr >= 7.0f) drawLed (g, led, Palette::warn,   "Dense - check the punch");
     else                  drawLed (g, led, Palette::danger, "Over-compressed - little punch left");
@@ -308,4 +390,23 @@ void MasterView::drawStreaming (juce::Graphics& g)
         g.setColour (colour);
         g.drawFittedText (text, row.toNearestInt(), juce::Justification::centredLeft, 1);
     }
+}
+
+void MasterView::drawChannel (juce::Graphics& g)
+{
+    auto a = streamArea;
+
+    g.setColour (Palette::textDim);
+    g.setFont (juce::FontOptions (11.0f, juce::Font::bold).withKerningFactor (0.06f));
+    const auto title = trackName.isNotEmpty() ? "CHANNEL  (" + trackName.toUpperCase() + ")" : juce::String ("CHANNEL");
+    g.drawFittedText (title, a.removeFromTop (16.0f).toNearestInt(), juce::Justification::centredLeft, 1);
+    a.removeFromTop (6.0f);
+
+    g.setColour (Palette::text);
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawFittedText ("Streaming platforms measure the whole song, so their table only "
+                      "shows on the master.\n\n"
+                      "Here: compare LUFS between channels to balance them, and keep a few "
+                      "dB of True Peak headroom so the master has room.",
+                      a.toNearestInt(), juce::Justification::topLeft, 8);
 }

@@ -21,6 +21,8 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
       masterView (p)
 {
     setLookAndFeel (&lookAndFeel);
+    tooltipWindow.setLookAndFeel (&lookAndFeel);
+    themeVersion = Palette::version();
     ++audioProcessor.editorsOpen;
 
     // Pestanas: botones que se comportan como grupo de radio
@@ -29,16 +31,13 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
     {
         tab->setClickingTogglesState (true);
         tab->setRadioGroupId (1001);
-        tab->setColour (juce::TextButton::buttonColourId,   Palette::background);
-        tab->setColour (juce::TextButton::buttonOnColourId, Palette::panel);
-        tab->setColour (juce::TextButton::textColourOffId,  Palette::textDim);
-        tab->setColour (juce::TextButton::textColourOnId,   Palette::barOver);
+        ThemeStyle::segment (*tab);
         tab->onClick = [this, index] { showTab (index); };
         addAndMakeVisible (tab);
         ++index;
     }
 
-    settingsButton.setTooltip ("Settings: curve speed, vertical range, peak hold");
+    settingsButton.setTooltip ("Settings: curve speed, range, peak hold, listen mode, colours");
     settingsButton.onClick = [this] { spectrumView.showSettingsMenu (settingsButton); };
     addAndMakeVisible (settingsButton);
     addAndMakeVisible (listenButton);
@@ -60,6 +59,8 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
     setSize (w, h);
 
     dcShown = audioProcessor.getLevelMeter().getDcOffset() > LevelMeter::dcWarnLevel;
+    listenShown = listenButton.isOn();
+    masterTab.setButtonText (masterView.showsMaster() ? "Master" : "Loudness");
     startTimerHz (30);
 }
 
@@ -67,6 +68,7 @@ BarSpectrumAnalyzerAudioProcessorEditor::~BarSpectrumAnalyzerAudioProcessorEdito
 {
     stopTimer();
     --audioProcessor.editorsOpen;
+    tooltipWindow.setLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
 }
 
@@ -86,6 +88,16 @@ void BarSpectrumAnalyzerAudioProcessorEditor::showTab (int index)
 
 void BarSpectrumAnalyzerAudioProcessorEditor::timerCallback()
 {
+    // Cambio de tema (desde esta ventana o desde otra instancia de Lyman)
+    if (themeVersion != Palette::version())
+    {
+        themeVersion = Palette::version();
+        lookAndFeel.refreshColours();
+        ThemeStyle::refreshTree (*this);
+        sendLookAndFeelChange();
+        repaint();
+    }
+
     // Solo se redibuja la pestana visible
     if (currentTab == 0)      spectrumView.repaint();
     else if (currentTab == 1) phaseView.repaint();
@@ -97,6 +109,15 @@ void BarSpectrumAnalyzerAudioProcessorEditor::timerCallback()
     {
         listenShown = listenButton.isOn();
         repaint();
+    }
+
+    // En que pista esta (el DAW puede mandar o cambiar el nombre en cualquier
+    // momento). En un canal, la pestana Master se llama "Loudness".
+    if (++roleTicks >= 10)
+    {
+        roleTicks = 0;
+        masterView.refreshRole();
+        masterTab.setButtonText (masterView.showsMaster() ? "Master" : "Loudness");
     }
 
     // Aviso de DC offset en la cabecera (visible en cualquier pestana)
@@ -153,15 +174,19 @@ void BarSpectrumAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
     if (! compactLogo)
         Logo::drawMark (g, header.removeFromRight (48.0f).withSizeKeepingCentre (48.0f, 18.0f), Palette::barOver);
 
+    // Mientras se escucha en Mono / Side, el texto del logo se vuelve el aviso
+    // (misma tipografia, en amarillo): no tapa nada de la grafica.
     if (! compactLogo)
     {
-        g.setColour (Palette::text);
+        const bool listening = listenShown;
+        g.setColour (listening ? Palette::warn : Palette::text);
         g.setFont (juce::FontOptions (14.0f, juce::Font::bold).withKerningFactor (0.14f));
-        g.drawText ("BLACKLIGHT", text.removeFromTop (17.0f), juce::Justification::bottomLeft);
+        g.drawText (listening ? (listenButton.isSideMode() ? "SIDE ONLY" : "MONO CHECK") : "BLACKLIGHT",
+                    text.removeFromTop (17.0f), juce::Justification::bottomLeft);
 
-        g.setColour (Palette::textDim);
+        g.setColour (listening ? Palette::warn.withAlpha (0.8f) : Palette::textDim);
         g.setFont (juce::FontOptions (9.0f).withKerningFactor (0.28f));
-        g.drawText ("SPECTRUM TOOLS", text, juce::Justification::topLeft);
+        g.drawText (listening ? "OFF ON EXPORT" : "SPECTRUM TOOLS", text, juce::Justification::topLeft);
     }
 
     g.setColour (Palette::panel);
@@ -184,18 +209,12 @@ void BarSpectrumAnalyzerAudioProcessorEditor::paint (juce::Graphics& g)
 
 void BarSpectrumAnalyzerAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    // Aviso grande mientras se escucha en Mono / Side: es lo unico que cambia
-    // el sonido, tiene que ser imposible no verlo.
+    // Mientras se escucha en Mono / Side (lo unico que cambia el sonido), la
+    // ventana entera lleva un marco amarillo: imposible no verlo, y no tapa
+    // ninguna lectura. El texto del aviso va en el lugar del logo.
     if (! listenButton.isOn())
         return;
 
-    const juce::String text = listenButton.isSideMode() ? "SIDE ONLY - listening only, turns off on export"
-                                                        : "MONO CHECK - listening only, turns off on export";
-    g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-    const float w = juce::jmin ((float) getWidth() - 40.0f, 380.0f);
-    const auto pill = juce::Rectangle<float> (((float) getWidth() - w) * 0.5f, (float) getHeight() - 30.0f, w, 22.0f);
     g.setColour (Palette::warn);
-    g.fillRoundedRectangle (pill, 11.0f);
-    g.setColour (Palette::background);
-    g.drawFittedText (text, pill.toNearestInt(), juce::Justification::centred, 1);
+    g.drawRect (getLocalBounds(), 2);
 }

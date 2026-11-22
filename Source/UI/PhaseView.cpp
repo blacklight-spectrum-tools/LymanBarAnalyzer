@@ -1,6 +1,7 @@
 #include "PhaseView.h"
 #include "../PluginProcessor.h"
 #include "../Palette.h"
+#include "BlacklightLookAndFeel.h"
 
 namespace
 {
@@ -26,10 +27,7 @@ PhaseView::PhaseView (BarSpectrumAnalyzerAudioProcessor& p)
     {
         auto& b = scaleButtons[(size_t) i];
         b.setButtonText (names[i]);
-        b.setColour (juce::TextButton::buttonColourId,   Palette::background);
-        b.setColour (juce::TextButton::buttonOnColourId, Palette::panel);
-        b.setColour (juce::TextButton::textColourOffId,  Palette::textDim);
-        b.setColour (juce::TextButton::textColourOnId,   Palette::barOver);
+        ThemeStyle::segment (b);
         b.setConnectedEdges (i == 0 ? juce::Button::ConnectedOnRight : juce::Button::ConnectedOnLeft);
         b.onClick = [this, i] { setScaleMode (i); };
         addAndMakeVisible (b);

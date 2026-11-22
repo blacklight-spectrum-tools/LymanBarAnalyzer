@@ -16,6 +16,11 @@ listen and turns itself off on export.
 **Free. Really.** No trial, no account, no expiry. What's free today stays
 free.
 
+Lyman is free. If it helps you, you can support its development (signing the
+installer, the Mac version):
+
+[![Support Lyman on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/blacklightspectrumtools)
+
 ## Download
 
 **[Download the latest version (Windows installer)](https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer/releases/latest)**

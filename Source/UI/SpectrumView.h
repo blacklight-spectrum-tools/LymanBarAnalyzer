@@ -38,8 +38,9 @@ public:
     void setFrozen (bool shouldFreeze);
     void resetPeaks();
 
-    // Menu del engrane (el boton vive en la cabecera, junto al logo)
-    void showSettingsMenu (juce::Component& target);
+    // Menu del engrane (el boton vive en la cabecera, junto al logo).
+    // parent solo se usa en pruebas, para dibujar el menu dentro de la ventana.
+    void showSettingsMenu (juce::Component& target, juce::Component* parent = nullptr);
 
     // Para pruebas / capturas: posicion del mouse y zona de la grafica
     void setHoverPosition (std::optional<juce::Point<float>> p) { hoverPos = p; }

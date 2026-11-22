@@ -559,3 +559,52 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new BarSpectrumAnalyzerAudioProcessor();
 }
+
+//==============================================================================
+// En que pista esta Lyman
+
+void BarSpectrumAnalyzerAudioProcessor::updateTrackProperties (const TrackProperties& properties)
+{
+    const juce::ScopedLock sl (trackLock);
+    trackName = properties.name.value_or (juce::String()).trim();
+}
+
+juce::String BarSpectrumAnalyzerAudioProcessor::getTrackName() const
+{
+    const juce::ScopedLock sl (trackLock);
+    return trackName;
+}
+
+int BarSpectrumAnalyzerAudioProcessor::getTrackRole() const
+{
+    return juce::jlimit ((int) roleAuto, (int) roleChannel, (int) apvts.state.getProperty ("trackRole", (int) roleAuto));
+}
+
+void BarSpectrumAnalyzerAudioProcessor::setTrackRole (int role)
+{
+    apvts.state.setProperty ("trackRole", juce::jlimit ((int) roleAuto, (int) roleChannel, role), nullptr);
+}
+
+bool BarSpectrumAnalyzerAudioProcessor::looksLikeMaster (const juce::String& name)
+{
+    // Nombres del canal principal en los DAWs mas comunes
+    const auto n = name.trim().toLowerCase();
+    for (auto* m : { "master", "main", "stereo out", "main out", "master bus", "mix bus", "2-bus", "2 bus" })
+        if (n == m)
+            return true;
+    return n.startsWith ("master ");
+}
+
+bool BarSpectrumAnalyzerAudioProcessor::isOnMaster() const
+{
+    switch (getTrackRole())
+    {
+        case roleMaster:  return true;
+        case roleChannel: return false;
+        default: break;
+    }
+
+    // Automatico: si el DAW no manda nombre, se asume master (como antes)
+    const auto name = getTrackName();
+    return name.isEmpty() || looksLikeMaster (name);
+}

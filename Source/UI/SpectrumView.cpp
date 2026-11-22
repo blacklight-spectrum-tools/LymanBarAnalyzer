@@ -1,6 +1,7 @@
 #include "SpectrumView.h"
 #include "../PluginProcessor.h"
 #include "../Palette.h"
+#include "BlacklightLookAndFeel.h"
 
 namespace
 {
@@ -42,7 +43,7 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
     // Tilt: tres botones tipo segmento, ligados al parametro "tilt"
     tiltLabel.setText ("TILT", juce::dontSendNotification);
     tiltLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-    tiltLabel.setColour (juce::Label::textColourId, Palette::textDim);
+    ThemeStyle::dimLabel (tiltLabel);
     tiltLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (tiltLabel);
 
@@ -65,7 +66,7 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
     // Vista: Sum (solo Mid, como siempre) o M/S (Mid + Side superpuestos)
     viewLabel.setText ("VIEW", juce::dontSendNotification);
     viewLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-    viewLabel.setColour (juce::Label::textColourId, Palette::textDim);
+    ThemeStyle::dimLabel (viewLabel);
     viewLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (viewLabel);
 
@@ -88,7 +89,7 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
     // Estilo: barras, curva o ambas (solo cambia el dibujo)
     styleLabel.setText ("STYLE", juce::dontSendNotification);
     styleLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
-    styleLabel.setColour (juce::Label::textColourId, Palette::textDim);
+    ThemeStyle::dimLabel (styleLabel);
     styleLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (styleLabel);
 
@@ -210,13 +211,36 @@ void GearButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     g.fillPath (gear);
 }
 
-void SpectrumView::showSettingsMenu (juce::Component& target)
+namespace
+{
+    // Corazon dibujado a mano (sin depender de que la fuente tenga el simbolo)
+    std::unique_ptr<juce::Drawable> heartIcon()
+    {
+        juce::Path p;
+        p.startNewSubPath (6.0f, 11.0f);
+        p.cubicTo (-1.5f, 5.5f, 0.5f, -0.5f, 6.0f, 3.0f);
+        p.cubicTo (11.5f, -0.5f, 13.5f, 5.5f, 6.0f, 11.0f);
+        p.closeSubPath();
+
+        auto d = std::make_unique<juce::DrawablePath>();
+        d->setPath (p);
+        d->setFill (Palette::barOver);
+        return d;
+    }
+
+    const char* const supportUrl = "https://ko-fi.com/blacklightspectrumtools";
+}
+
+void SpectrumView::showSettingsMenu (juce::Component& target, juce::Component* parent)
 {
     auto& apvts = audioProcessor.apvts;
     auto current = [&apvts] (const char* id) { return (int) std::round (apvts.getRawParameterValue (id)->load()); };
 
+    // Dos columnas: a la izquierda la lectura, a la derecha escucha y colores
     juce::PopupMenu menu;
-    menu.addSectionHeader ("Curve speed (averaging)");
+    menu.setLookAndFeel (&target.getLookAndFeel());
+
+    menu.addSectionHeader ("Curve speed");
     const char* speeds[] = { "Fast (0.25 s)", "Normal (1 s)", "Slow (3 s)" };
     for (int i = 0; i < 3; ++i)
         menu.addItem (1 + i, speeds[i], true, current ("curveSpeed") == i);
@@ -226,14 +250,28 @@ void SpectrumView::showSettingsMenu (juce::Component& target)
     for (int i = 0; i < 3; ++i)
         menu.addItem (11 + i, ranges[i], true, current ("range") == i);
 
-    menu.addSectionHeader ("Listen button (hold to listen)");
-    menu.addItem (31, "Mono", true, current ("listenMode") == 0);
-    menu.addItem (32, "Side only", true, current ("listenMode") == 1);
-
     menu.addSectionHeader ("Peak hold");
     menu.addItem (21, "Normal (1 s)", true, current ("peakHold") == 0);
     menu.addItem (22, "Infinite (whole song)", true, current ("peakHold") == 1);
-    menu.addItem (23, "Reset peaks (or double-click the graph)");
+    menu.addItem (23, "Reset peaks (double-click)");
+
+    menu.addColumnBreak();
+
+    menu.addSectionHeader ("Listen button");
+    menu.addItem (31, "Mono", true, current ("listenMode") == 0);
+    menu.addItem (32, "Side only", true, current ("listenMode") == 1);
+
+    const auto& look = Palette::settings();
+    menu.addSectionHeader ("Colours");
+    menu.addItem (41, "Blacklight", true, look.theme == Palette::blacklightTheme);
+    menu.addItem (42, "Graphite (neutral)", true, look.theme == Palette::graphiteTheme);
+    menu.addItem (43, "Dim (dark room)", true, look.theme == Palette::dimTheme);
+    menu.addItem (44, "Colour-blind safe alerts", true, look.colourBlind);
+
+    menu.addSeparator();
+    juce::PopupMenu::Item support ("Support Lyman (Ko-fi)");
+    support.setID (51).setImage (heartIcon());
+    menu.addItem (std::move (support));
 
     auto setChoice = [&apvts] (const char* id, int index)
     {
@@ -246,9 +284,15 @@ void SpectrumView::showSettingsMenu (juce::Component& target)
     };
 
     juce::Component::SafePointer<SpectrumView> safeThis (this);
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&target),
+    auto options = juce::PopupMenu::Options().withTargetComponent (&target);
+    if (parent != nullptr)
+        options = options.withParentComponent (parent);
+
+    menu.showMenuAsync (options,
                         [setChoice, safeThis] (int result)
                         {
+                            const auto& s = Palette::settings();
+
                             if (result >= 1 && result <= 3)        setChoice ("curveSpeed", result - 1);
                             else if (result >= 11 && result <= 13) setChoice ("range", result - 11);
                             else if (result == 21 || result == 22)
@@ -258,6 +302,9 @@ void SpectrumView::showSettingsMenu (juce::Component& target)
                             }
                             else if (result == 23 && safeThis != nullptr) safeThis->resetPeaks();
                             else if (result == 31 || result == 32)       setChoice ("listenMode", result - 31);
+                            else if (result >= 41 && result <= 43)       Palette::setTheme (result - 41, s.colourBlind);
+                            else if (result == 44)                       Palette::setTheme (s.theme, ! s.colourBlind);
+                            else if (result == 51)                       juce::URL (supportUrl).launchInDefaultBrowser();
                         });
 }
 
@@ -270,10 +317,7 @@ void SpectrumView::setStyleButtons (int index)
 void SpectrumView::styleSegment (juce::TextButton& b, int index, int count)
 {
     b.setClickingTogglesState (false);
-    b.setColour (juce::TextButton::buttonColourId,   Palette::background);
-    b.setColour (juce::TextButton::buttonOnColourId, Palette::panel);
-    b.setColour (juce::TextButton::textColourOffId,  Palette::textDim);
-    b.setColour (juce::TextButton::textColourOnId,   Palette::barOver);
+    ThemeStyle::segment (b);
     b.setConnectedEdges ((index > 0 ? juce::Button::ConnectedOnLeft : 0)
                        | (index < count - 1 ? juce::Button::ConnectedOnRight : 0));
 }

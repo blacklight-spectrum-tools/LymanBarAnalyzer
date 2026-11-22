@@ -48,6 +48,8 @@ private:
     bool dcShown = false;          // aviso de DC offset en la cabecera
     juce::Rectangle<int> dcArea;
     bool compactLogo = false;      // ventanas chicas: solo la marca, sin texto
+    int themeVersion = -1;         // para notar un cambio de tema de color
+    int roleTicks = 0;             // cada tanto se revisa en que pista esta
 
     static constexpr int headerHeight = 44;
 

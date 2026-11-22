@@ -82,12 +82,27 @@ public:
     // Ventanas abiertas (la curva solo se calcula si alguien la esta viendo)
     std::atomic<int> editorsOpen { 0 };
 
+    // --- En que pista esta Lyman (pestana Master) ------------------------
+    // El DAW manda el nombre de la pista (VST3; en FL: "Master", "Insert 3"...).
+    // Si no lo manda, o se equivoca, el usuario elige a mano.
+    enum TrackRole { roleAuto = 0, roleMaster, roleChannel };
+
+    void updateTrackProperties (const TrackProperties&) override;
+    juce::String getTrackName() const;
+    int  getTrackRole() const;                 // lo que eligio el usuario
+    void setTrackRole (int role);
+    bool isOnMaster() const;                   // decision final (hilo de la interfaz)
+    static bool looksLikeMaster (const juce::String& trackName);
+
 private:
     struct SpectrumChannel
     {
         std::vector<float> fifo;
         std::vector<float> data;
     };
+
+    juce::CriticalSection trackLock;
+    juce::String trackName;
 
     void pushSamplesForFFT (float mid, float side);
     void analyse (const float* left, const float* right, int numChannels, int numSamples);

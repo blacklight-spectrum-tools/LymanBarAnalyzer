@@ -16,6 +16,11 @@ se apaga solo al exportar.
 **Gratis de verdad.** Sin demo, sin cuenta, sin caducidad. Lo que hoy es
 gratis se queda gratis.
 
+Lyman es gratis. Si te sirve, puedes apoyar su desarrollo (firmar el
+instalador, la versión para Mac):
+
+[![Apoya a Lyman en Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/blacklightspectrumtools)
+
 ## Descargar
 
 **[Descarga la versión más reciente (instalador para Windows)](https://github.com/blacklight-spectrum-tools/LymanBarAnalyzer/releases/latest)**
