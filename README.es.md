@@ -137,7 +137,8 @@ versión sale cuando está probada en mezclas reales.
 - [ ] Pestaña Master que sabe en qué canal está (tabla de streaming solo en el
       master)
 - [ ] Modo de lecturas grandes para grabar pantalla y dar clases
-- [ ] Modos de color atenuado y para daltonismo
+- [ ] Modos de color: grafito neutro (descansa la vista en sesiones largas),
+      atenuado y para daltonismo
 
 **Más adelante**
 

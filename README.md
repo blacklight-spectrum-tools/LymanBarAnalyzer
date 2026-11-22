@@ -128,7 +128,8 @@ ships when it is tested in real mixes.
 - [ ] Instrument zones (e.g. voice: body, presence, sibilance, air)
 - [ ] Master tab aware of the channel it is on (streaming table only on the master)
 - [ ] Large readings mode for screen recording and teaching
-- [ ] Dim and colour-blind friendly colour modes
+- [ ] Colour modes: neutral graphite (easy on the eyes in long sessions), dim
+      and colour-blind friendly
 
 **Later**
 
