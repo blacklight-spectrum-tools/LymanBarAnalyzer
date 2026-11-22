@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "../Palette.h"
 #include "BlacklightLookAndFeel.h"
+#include "GuideZones.h"
 
 namespace
 {
@@ -113,6 +114,73 @@ SpectrumView::SpectrumView (BarSpectrumAnalyzerAudioProcessor& p)
     freezeButton.setTooltip ("Freeze the display to study it (meters keep running)");
     freezeButton.onClick = [this] { setFrozen (! frozen); };
     addAndMakeVisible (freezeButton);
+
+    // Guide: zonas por instrumento (se prende y apaga; no estorba si no se usa)
+    styleSegment (guideButton, 0, 1);
+    guideButton.setTooltip ("Guide: show instrument zones above the graph (what each zone does, "
+                            "and how much it passes the reference)");
+    guideButton.onClick = [this] { setGuide (! guideOn); };
+    addAndMakeVisible (guideButton);
+
+    instrumentButton.setTooltip ("Guide zones for this instrument. Click to change.");
+    instrumentButton.onClick = [this] { showInstrumentMenu(); };
+    addChildComponent (instrumentButton);
+
+    const auto& state = audioProcessor.apvts.state;
+    guideChoice = juce::jlimit (0, GuideZones::numInstruments, (int) state.getProperty ("guideInstrument", 0));
+    setGuide ((bool) state.getProperty ("guide", false));
+}
+
+void SpectrumView::setGuide (bool on)
+{
+    guideOn = on;
+    audioProcessor.apvts.state.setProperty ("guide", on, nullptr);
+    guideButton.setToggleState (on, juce::dontSendNotification);
+    instrumentButton.setVisible (on);
+    guideHoverPos.reset();
+    resized();
+    repaint();
+}
+
+int SpectrumView::currentInstrument()
+{
+    if (guideChoice > 0)
+        return guideChoice - 1;
+
+    // Automatico: por el nombre de la pista (solo se recalcula si cambia)
+    const auto name = audioProcessor.getTrackName();
+    const bool onMaster = audioProcessor.isOnMaster();
+    if (name != lastTrackName || onMaster != lastOnMaster)
+    {
+        lastTrackName  = name;
+        lastOnMaster   = onMaster;
+        autoInstrument = onMaster ? GuideZones::mix : GuideZones::detect (name);
+    }
+    return autoInstrument;
+}
+
+void SpectrumView::showInstrumentMenu()
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&getLookAndFeel());
+    menu.addSectionHeader ("Guide zones");
+
+    const auto autoName = juce::String (GuideZones::instruments[guideChoice == 0 ? currentInstrument() : autoInstrument].menuName);
+    menu.addItem (1, "Auto (track name): " + autoName, true, guideChoice == 0);
+    menu.addSeparator();
+    for (int i = 0; i < GuideZones::numInstruments; ++i)
+        menu.addItem (10 + i, GuideZones::instruments[i].menuName, true, guideChoice == i + 1);
+
+    juce::Component::SafePointer<SpectrumView> safeThis (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&instrumentButton),
+                        [safeThis] (int result)
+                        {
+                            if (safeThis == nullptr || result == 0)
+                                return;
+                            safeThis->guideChoice = result == 1 ? 0 : result - 9;
+                            safeThis->audioProcessor.apvts.state.setProperty ("guideInstrument", safeThis->guideChoice, nullptr);
+                            safeThis->repaint();
+                        });
 }
 
 void SpectrumView::setFrozen (bool shouldFreeze)
@@ -363,20 +431,35 @@ void SpectrumView::resized()
     // Fila 2: TILT / VIEW / STYLE
     area.removeFromTop (8);
     auto row2 = area.removeFromTop (26);
+    const bool narrow = getWidth() < 700;     // botones un poco mas angostos
+    const int  gap    = narrow ? 10 : 14;
     tiltLabel.setBounds (row2.removeFromLeft (34));
     for (auto& b : tiltButtons)
-        b.setBounds (row2.removeFromLeft (52));
-    row2.removeFromLeft (14);
+        b.setBounds (row2.removeFromLeft (narrow ? 46 : 52));
+    row2.removeFromLeft (gap);
     viewLabel.setBounds (row2.removeFromLeft (38));
     for (auto& b : viewButtons)
-        b.setBounds (row2.removeFromLeft (48));
-    row2.removeFromLeft (14);
+        b.setBounds (row2.removeFromLeft (narrow ? 44 : 48));
+    row2.removeFromLeft (gap);
     styleLabel.setBounds (row2.removeFromLeft (44));
     for (auto& b : styleButtons)
-        b.setBounds (row2.removeFromLeft (54));
+        b.setBounds (row2.removeFromLeft (narrow ? 50 : 54));
     freezeButton.setBounds (row2.removeFromRight (64));
+    row2.removeFromRight (6);
+    guideButton.setBounds (row2.removeFromRight (60));
 
     area.removeFromTop (14);
+
+    // Tira de zonas (solo con Guide): arriba de la grafica, sin tapar nada
+    guideArea = {};
+    if (guideOn)
+    {
+        auto strip = area.removeFromTop (20);
+        area.removeFromTop (10);
+        // Etiqueta del instrumento en la columna de los dB (usa el margen izquierdo)
+        instrumentButton.setBounds (strip.getX() - 12, strip.getY() + 1, 42, 18);
+        guideArea = strip.toFloat().withTrimmedLeft (32.0f).withTrimmedRight (54.0f);   // = ancho de la grafica
+    }
 
     // Medidor de nivel a la derecha, con su foco de clip debajo
     auto plot = area.toFloat();
@@ -410,10 +493,13 @@ void SpectrumView::mouseMove (const juce::MouseEvent& e)
 {
     if (plotArea.contains (e.position)) hoverPos = e.position;
     else                                hoverPos.reset();
+
+    if (guideOn && guideArea.contains (e.position)) guideHoverPos = e.position;
+    else                                            guideHoverPos.reset();
 }
 
 void SpectrumView::mouseDrag (const juce::MouseEvent& e) { mouseMove (e); }
-void SpectrumView::mouseExit (const juce::MouseEvent&)   { hoverPos.reset(); }
+void SpectrumView::mouseExit (const juce::MouseEvent&)   { hoverPos.reset(); guideHoverPos.reset(); }
 
 void SpectrumView::paint (juce::Graphics& g)
 {
@@ -641,7 +727,14 @@ void SpectrumView::paint (juce::Graphics& g)
         g.setFont (juce::FontOptions (11.0f));
     }
 
+    if (guideOn)
+        drawGuideStrip (g, tilt, refDb, showBars);
+
     drawHover (g, tilt, refDb, showBars, showSide, barWidth, barGap);
+
+    if (guideOn)
+        drawGuideInfo (g, tilt, refDb, showBars);
+
     drawLevelMeter (g);
     drawReadouts (g);
 }
@@ -1039,5 +1132,193 @@ void SpectrumView::drawReadouts (juce::Graphics& g)
         g.drawText (items[i].label, slot.withTrimmedRight (6.0f), juce::Justification::centredRight);
 
         area.removeFromRight (8.0f);
+    }
+}
+
+//==============================================================================
+// Guide: zonas por instrumento
+
+namespace
+{
+    juce::String hzText (float hz)
+    {
+        if (hz >= 1000.0f)
+        {
+            const float k = hz / 1000.0f;
+            return (std::abs (k - std::round (k)) < 0.05f ? juce::String ((int) std::round (k)) : juce::String (k, 1)) + "k";
+        }
+        return juce::String ((int) std::round (hz));
+    }
+}
+
+int SpectrumView::zoneAt (float x)
+{
+    const auto& inst = GuideZones::instruments[currentInstrument()];
+    const auto plot = plotArea;
+    for (int z = 0; z < inst.numZones; ++z)
+    {
+        const auto& zone = inst.zones[z];
+        const float x0 = plot.getX() + std::log (zone.lo / 20.0f) / std::log (1000.0f) * plot.getWidth();
+        const float x1 = plot.getX() + std::log (zone.hi / 20.0f) / std::log (1000.0f) * plot.getWidth();
+        if (x >= x0 && x <= x1)
+            return z;
+    }
+    return -1;
+}
+
+// Cuanto pasa la referencia lo mas alto de la zona (negativo = queda abajo)
+float SpectrumView::zoneOverRef (float lo, float hi, float tilt, float refDb, bool showBars) const
+{
+    using P = BarSpectrumAnalyzerAudioProcessor;
+    float best = -200.0f;
+
+    if (showBars)
+    {
+        for (int i = 0; i < numBars; ++i)
+        {
+            const float centreHz = std::sqrt (audioProcessor.getBandFrequency (i) * audioProcessor.getBandFrequency (i + 1));
+            if (centreHz < lo || centreHz > hi)
+                continue;
+            best = juce::jmax (best, barDb (i) + tilt * std::log2 (centreHz / 1000.0f));
+        }
+    }
+    else
+    {
+        for (int k = 0; k < P::numCurvePoints; ++k)
+        {
+            const float hz = P::getCurveFrequency (k);
+            if (hz < lo || hz > hi)
+                continue;
+            best = juce::jmax (best, curveDb (k, false) + tilt * std::log2 (hz / 1000.0f));
+        }
+    }
+    return best <= -150.0f ? -200.0f : best - refDb;
+}
+
+void SpectrumView::drawGuideStrip (juce::Graphics& g, float tilt, float refDb, bool showBars)
+{
+    const int instIndex = currentInstrument();
+    const auto& inst = GuideZones::instruments[instIndex];
+    instrumentButton.setButtonText (inst.tag);
+
+    const auto plot  = plotArea;
+    const auto strip = guideArea.withX (plot.getX()).withWidth (plot.getWidth());
+    const int hovered = guideHoverPos.has_value() ? zoneAt (guideHoverPos->x) : -1;
+
+    auto xFor = [&] (float hz) { return plot.getX() + std::log (hz / 20.0f) / std::log (1000.0f) * plot.getWidth(); };
+
+    // Fondo de la tira
+    g.setColour (Palette::panel.withAlpha (0.35f));
+    g.fillRoundedRectangle (strip, 3.0f);
+
+    for (int z = 0; z < inst.numZones; ++z)
+    {
+        const auto& zone = inst.zones[z];
+        auto r = juce::Rectangle<float>::leftTopRightBottom (xFor (zone.lo) + 1.0f, strip.getY(),
+                                                            xFor (zone.hi) - 1.0f, strip.getBottom());
+        const bool over = zoneOverRef (zone.lo, zone.hi, tilt, refDb, showBars) > 0.0f;
+        const bool isHovered = z == hovered;
+
+        // Tonos de la paleta alternados (nada de amarillo/rojo: son de los avisos)
+        g.setColour (isHovered ? Palette::grid : (z % 2 == 0 ? Palette::panel : Palette::panel.interpolatedWith (Palette::grid, 0.35f)));
+        g.fillRoundedRectangle (r, 3.0f);
+
+        // La zona se enciende cuando algo suyo pasa la referencia
+        if (over)
+        {
+            g.setColour (Palette::barOver);
+            g.fillRoundedRectangle (r.withHeight (2.0f), 1.0f);
+        }
+
+        g.setColour (over ? Palette::barOver : (isHovered ? Palette::text : Palette::textDim));
+        const auto font = juce::FontOptions (10.5f, over ? juce::Font::bold : juce::Font::plain);
+        g.setFont (font);
+        const auto textArea = r.reduced (3.0f, 0.0f);
+        juce::String label (zone.name);
+        if (juce::GlyphArrangement::getStringWidth (font, label) > textArea.getWidth())
+            label = zone.shortName;
+        if (juce::GlyphArrangement::getStringWidth (font, label) <= textArea.getWidth() + 2.0f)
+            g.drawText (label, textArea, juce::Justification::centred, false);
+    }
+
+    // Zona bajo el mouse: sus limites bajan hasta el eje (ahi se leen los Hz)
+    if (hovered >= 0)
+    {
+        const auto& zone = inst.zones[hovered];
+        const float x0 = xFor (zone.lo), x1 = xFor (zone.hi);
+        g.setColour (Palette::barOver.withAlpha (0.05f));
+        g.fillRect (juce::Rectangle<float>::leftTopRightBottom (x0, plot.getY(), x1, plot.getBottom()));
+
+        const float dashes[] = { 3.0f, 3.0f };
+        g.setColour (Palette::text.withAlpha (0.55f));
+        for (float x : { x0, x1 })
+            g.drawDashedLine (juce::Line<float> (x, strip.getBottom(), x, plot.getBottom() + 4.0f), dashes, 2, 1.0f);
+
+        // Hz de los limites junto al eje
+        g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+        g.setColour (Palette::text);
+        for (float hz : { zone.lo, zone.hi })
+        {
+            const float x = xFor (hz);
+            auto box = juce::Rectangle<float> (x - 20.0f, plot.getBottom() - 16.0f, 40.0f, 13.0f)
+                           .constrainedWithin (plot);
+            g.setColour (Palette::background.withAlpha (0.85f));
+            g.fillRoundedRectangle (box.withSizeKeepingCentre (juce::GlyphArrangement::getStringWidth (juce::FontOptions (10.0f, juce::Font::bold), hzText (hz)) + 8.0f, 13.0f), 3.0f);
+            g.setColour (Palette::text);
+            g.drawText (hzText (hz), box, juce::Justification::centred);
+        }
+    }
+}
+
+void SpectrumView::drawGuideInfo (juce::Graphics& g, float tilt, float refDb, bool showBars)
+{
+    if (! guideHoverPos.has_value())
+        return;
+    const int z = zoneAt (guideHoverPos->x);
+    if (z < 0)
+        return;
+
+    const auto& zone = GuideZones::instruments[currentInstrument()].zones[z];
+    const float over = zoneOverRef (zone.lo, zone.hi, tilt, refDb, showBars);
+
+    struct Line { juce::String text; juce::Colour colour; bool bold; };
+    juce::Array<Line> lines;
+    lines.add ({ juce::String (zone.name).toUpperCase() + "   " + hzText (zone.lo) + " - " + hzText (zone.hi) + " Hz", Palette::text, true });
+    lines.add ({ zone.what, Palette::textDim, false });
+    lines.add ({ "Too much: " + juce::String (zone.tooMuch), Palette::text, false });
+    if (juce::String (zone.tooLittle).isNotEmpty())
+        lines.add ({ "Too little: " + juce::String (zone.tooLittle), Palette::text, false });
+    if (over > -150.0f)
+        lines.add ({ over > 0.0f ? "+" + juce::String (over, 1) + " dB over ref"
+                                 : juce::String (-over, 1) + " dB below ref",
+                     over > 0.0f ? Palette::barOver : Palette::textDim, over > 0.0f });
+
+    const juce::FontOptions font (12.0f), bold (12.0f, juce::Font::bold);
+    float w = 0.0f;
+    for (const auto& l : lines)
+        w = juce::jmax (w, juce::GlyphArrangement::getStringWidth (l.bold ? bold : font, l.text));
+    const float lineH = 16.0f;
+    auto box = juce::Rectangle<float> (0.0f, 0.0f, w + 20.0f, lineH * (float) lines.size() + 12.0f);
+
+    // Al lado de la zona (nunca encima de sus barras): a la derecha si la
+    // zona esta en la mitad izquierda, a la izquierda si no
+    const auto plot = plotArea;
+    auto xFor = [&] (float hz) { return plot.getX() + std::log (hz / 20.0f) / std::log (1000.0f) * plot.getWidth(); };
+    const float x0 = xFor (zone.lo), x1 = xFor (zone.hi);
+    const bool toRight = (x0 + x1) * 0.5f < plot.getCentreX();
+    box.setPosition (toRight ? x1 + 10.0f : x0 - 10.0f - box.getWidth(), plot.getY() + 6.0f);
+    box = box.constrainedWithin (plot.reduced (4.0f));
+
+    g.setColour (Palette::background.withAlpha (0.94f));
+    g.fillRoundedRectangle (box, 4.0f);
+    g.setColour (Palette::grid);
+    g.drawRoundedRectangle (box, 4.0f, 1.0f);
+
+    auto text = box.reduced (10.0f, 6.0f);
+    for (const auto& l : lines)
+    {
+        g.setColour (l.colour);
+        g.setFont (l.bold ? bold : font);
+        g.drawText (l.text, text.removeFromTop (lineH), juce::Justification::centredLeft, false);
     }
 }

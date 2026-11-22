@@ -45,6 +45,8 @@ public:
     // Para pruebas / capturas: posicion del mouse y zona de la grafica
     void setHoverPosition (std::optional<juce::Point<float>> p) { hoverPos = p; }
     juce::Rectangle<float> getPlotArea() const { return plotArea; }
+    juce::Rectangle<float> getGuideArea() const { return guideArea; }
+    void setGuideHover (std::optional<juce::Point<float>> p) { guideHoverPos = p; }
 
 private:
     static juce::String frequencyLabel (float hz);
@@ -59,6 +61,15 @@ private:
     void drawCurve (juce::Graphics&, bool side, float tilt, float refDb);
     void drawHover (juce::Graphics&, float tilt, float refDb, bool showBars, bool showSide,
                     float barWidth, float barGap);
+
+    // Guide: zonas por instrumento en una tira arriba de la grafica
+    void setGuide (bool on);
+    int  currentInstrument();                  // indice en GuideZones::instruments
+    void showInstrumentMenu();
+    float zoneOverRef (float lo, float hi, float tilt, float refDb, bool showBars) const;
+    void drawGuideStrip (juce::Graphics&, float tilt, float refDb, bool showBars);
+    void drawGuideInfo (juce::Graphics&, float tilt, float refDb, bool showBars);
+    int  zoneAt (float x);
 
     // Datos que se dibujan: en vivo, o la foto tomada al congelar
     float barDb (int i) const;
@@ -96,8 +107,18 @@ private:
     // Lectura al pasar el mouse por la grafica
     std::optional<juce::Point<float>> hoverPos;
 
+    // Guide (zonas por instrumento). Se guarda con el proyecto.
+    juce::TextButton guideButton { "Guide" };
+    juce::TextButton instrumentButton;
+    bool guideOn = false;
+    int  guideChoice = 0;                      // 0 = auto (nombre de la pista), 1.. = a mano
+    juce::String lastTrackName;
+    bool lastOnMaster = true;
+    int  autoInstrument = 0;
+    std::optional<juce::Point<float>> guideHoverPos;
+
     // Zonas calculadas en resized()
-    juce::Rectangle<float> plotArea, readoutArea, meterArea, clipArea;
+    juce::Rectangle<float> plotArea, readoutArea, meterArea, clipArea, guideArea;
 
     // Peak hold por barra y de la curva (nivel medido, sin tilt)
     std::array<float, numBars>  holdDb {};
