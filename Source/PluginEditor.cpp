@@ -37,7 +37,7 @@ BarSpectrumAnalyzerAudioProcessorEditor::BarSpectrumAnalyzerAudioProcessorEditor
         ++index;
     }
 
-    settingsButton.setTooltip ("Settings: curve speed, range, peak hold, listen mode, colours");
+    settingsButton.setTooltip ("Settings: curve speed, range, peak hold, listen mode, colours, large readings");
     settingsButton.onClick = [this] { spectrumView.showSettingsMenu (settingsButton); };
     addAndMakeVisible (settingsButton);
     addAndMakeVisible (listenButton);
@@ -94,6 +94,9 @@ void BarSpectrumAnalyzerAudioProcessorEditor::timerCallback()
         themeVersion = Palette::version();
         lookAndFeel.refreshColours();
         ThemeStyle::refreshTree (*this);
+        spectrumView.resized();          // lecturas grandes: cambia el acomodo
+        phaseView.resized();
+        masterView.resized();
         sendLookAndFeelChange();
         repaint();
     }

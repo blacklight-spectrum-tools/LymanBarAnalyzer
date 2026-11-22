@@ -330,11 +330,12 @@ void SpectrumView::showSettingsMenu (juce::Component& target, juce::Component* p
     menu.addItem (32, "Side only", true, current ("listenMode") == 1);
 
     const auto& look = Palette::settings();
-    menu.addSectionHeader ("Colours");
+    menu.addSectionHeader ("Display");
     menu.addItem (41, "Blacklight", true, look.theme == Palette::blacklightTheme);
     menu.addItem (42, "Graphite (neutral)", true, look.theme == Palette::graphiteTheme);
     menu.addItem (43, "Dim (dark room)", true, look.theme == Palette::dimTheme);
     menu.addItem (44, "Colour-blind safe alerts", true, look.colourBlind);
+    menu.addItem (45, "Large readings (for video)", true, look.largeReadings);
 
     menu.addSeparator();
     juce::PopupMenu::Item support ("Support Lyman (Ko-fi)");
@@ -372,6 +373,7 @@ void SpectrumView::showSettingsMenu (juce::Component& target, juce::Component* p
                             else if (result == 31 || result == 32)       setChoice ("listenMode", result - 31);
                             else if (result >= 41 && result <= 43)       Palette::setTheme (result - 41, s.colourBlind);
                             else if (result == 44)                       Palette::setTheme (s.theme, ! s.colourBlind);
+                            else if (result == 45)                       Palette::setLargeReadings (! s.largeReadings);
                             else if (result == 51)                       juce::URL (supportUrl).launchInDefaultBrowser();
                         });
 }
@@ -424,7 +426,8 @@ void SpectrumView::resized()
     // Fila 1: referencia + lecturas (Peak / RMS / LUFS) a la derecha
     auto row1 = area.removeFromTop (30);
     referenceLabel.setBounds (row1.removeFromLeft (210));
-    readoutArea = row1.removeFromRight (row1.getWidth() >= 560 ? 300 : 200).toFloat();
+    const int readW = Palette::large() ? (row1.getWidth() >= 680 ? 400 : 270) : (row1.getWidth() >= 560 ? 300 : 200);
+    readoutArea = row1.removeFromRight (readW).toFloat();
     row1.removeFromRight (12);
     referenceSlider.setBounds (row1);
 
@@ -454,11 +457,12 @@ void SpectrumView::resized()
     guideArea = {};
     if (guideOn)
     {
-        auto strip = area.removeFromTop (20);
+        auto strip = area.removeFromTop (Palette::large() ? 26 : 20);
         area.removeFromTop (10);
         // Etiqueta del instrumento en la columna de los dB (usa el margen izquierdo)
-        instrumentButton.setBounds (strip.getX() - 12, strip.getY() + 1, 42, 18);
-        guideArea = strip.toFloat().withTrimmedLeft (32.0f).withTrimmedRight (54.0f);   // = ancho de la grafica
+        const int dbCol = Palette::large() ? 44 : 32;
+        instrumentButton.setBounds (strip.getX() - 12, strip.getY() + 1, dbCol + 10, strip.getHeight() - 2);
+        guideArea = strip.toFloat().withTrimmedLeft ((float) dbCol).withTrimmedRight (54.0f);   // = ancho de la grafica
     }
 
     // Medidor de nivel a la derecha, con su foco de clip debajo
@@ -466,8 +470,8 @@ void SpectrumView::resized()
     auto meterColumn = plot.removeFromRight (40.0f);
     plot.removeFromRight (14.0f);
 
-    plot.removeFromBottom (22.0f);   // etiquetas de frecuencia
-    plot.removeFromLeft (32.0f);     // etiquetas de dB
+    plot.removeFromBottom (Palette::big (22.0f, 28.0f));   // etiquetas de frecuencia
+    plot.removeFromLeft (Palette::big (32.0f, 44.0f));     // etiquetas de dB
     plotArea  = plot;
 
     meterArea = meterColumn.withY (plot.getY()).withHeight (plot.getHeight());
@@ -536,7 +540,8 @@ void SpectrumView::paint (juce::Graphics& g)
         return plot.getX() + t * plot.getWidth();
     };
 
-    g.setFont (juce::FontOptions (11.0f));
+    g.setFont (juce::FontOptions (Palette::fs (11.0f)));
+    const float dbLabelW = Palette::big (30.0f, 40.0f), labelH = Palette::big (14.0f, 19.0f);
 
     // Rejilla de dB cada 12 dB
     for (int db = 0; db >= (int) minDb; db -= 12)
@@ -545,12 +550,12 @@ void SpectrumView::paint (juce::Graphics& g)
         g.setColour (Palette::grid.withAlpha (0.6f));
         g.drawHorizontalLine ((int) y, plot.getX(), plot.getRight());
         g.setColour (Palette::textDim);
-        g.drawText (juce::String (db), juce::Rectangle<float> (plot.getX() - 34.0f, y - 7.0f, 30.0f, 14.0f),
+        g.drawText (juce::String (db), juce::Rectangle<float> (plot.getX() - dbLabelW - 4.0f, y - labelH * 0.5f, dbLabelW, labelH),
                     juce::Justification::centredRight);
     }
 
     // Barras, peak hold y dB por encima de la referencia
-    const bool compactNumbers = barWidth < 21.0f;
+    const bool compactNumbers = barWidth < Palette::big (21.0f, 30.0f);
 
     // Curva: sombras (Mid, y Side encima en M/S) y "+dB" por zona
     if (! showBars)
@@ -608,7 +613,8 @@ void SpectrumView::paint (juce::Graphics& g)
         if (holdShown > minDb + 1.0f)
         {
             g.setColour (Palette::text.withAlpha (0.9f));
-            g.fillRect (x, dbToY (holdShown) - 1.0f, barWidth, 2.0f);
+            const float holdH = Palette::big (2.0f, 3.0f);
+            g.fillRect (x, dbToY (holdShown) - holdH * 0.5f, barWidth, holdH);
         }
 
         // Vista M/S: el canal Side como barra angosta cian encima de la Mid
@@ -644,13 +650,14 @@ void SpectrumView::paint (juce::Graphics& g)
             const float amount = db - refDb;
             const auto text = "+" + (compactNumbers ? juce::String (juce::roundToInt (amount))
                                                     : juce::String (amount, 1));
-            const float textY = juce::jmax (plot.getY(), juce::jmin (top, dbToY (holdShown)) - 16.0f);
+            const float textH = Palette::big (13.0f, 18.0f);
+            const float textY = juce::jmax (plot.getY(), juce::jmin (top, dbToY (holdShown)) - textH - 3.0f);
 
             g.setColour (Palette::barOver);
-            g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
-            g.drawText (text, juce::Rectangle<float> (x - 6.0f, textY, barWidth + 12.0f, 13.0f),
+            g.setFont (juce::FontOptions (Palette::fs (10.5f), juce::Font::bold));
+            g.drawText (text, juce::Rectangle<float> (x - 10.0f, textY, barWidth + 20.0f, textH),
                         juce::Justification::centred);
-            g.setFont (juce::FontOptions (11.0f));
+            g.setFont (juce::FontOptions (Palette::fs (11.0f)));
         }
     }
 
@@ -658,13 +665,13 @@ void SpectrumView::paint (juce::Graphics& g)
     // etiqueta no cabe junto a la anterior se omite (nunca se corta).
     const float ticks[] = { 30.0f, 50.0f, 100.0f, 200.0f, 500.0f,
                             1000.0f, 2000.0f, 5000.0f, 10000.0f, 20000.0f };
-    const float labelW  = 34.0f;
+    const float labelW  = Palette::big (34.0f, 44.0f);
     float lastRight = -1.0e9f;
 
     for (float hz : ticks)
     {
         const float x = freqToX (hz);
-        auto box = juce::Rectangle<float> (x - labelW * 0.5f, plot.getBottom() + 6.0f, labelW, 14.0f);
+        auto box = juce::Rectangle<float> (x - labelW * 0.5f, plot.getBottom() + 6.0f, labelW, labelH);
 
         if (box.getX() < plot.getX() - 4.0f)          box.setX (plot.getX() - 4.0f);
         if (box.getRight() > plot.getRight() + 4.0f)  box.setX (plot.getRight() + 4.0f - labelW);
@@ -681,19 +688,23 @@ void SpectrumView::paint (juce::Graphics& g)
 
     // Linea horizontal de referencia (umbral objetivo de compresion)
     g.setColour (Palette::referenceLine);
-    g.drawHorizontalLine ((int) dbToY (refDb), plot.getX(), plot.getRight());
+    if (Palette::large())
+        g.fillRect (plot.getX(), dbToY (refDb) - 1.0f, plot.getWidth(), 2.0f);
+    else
+        g.drawHorizontalLine ((int) dbToY (refDb), plot.getX(), plot.getRight());
 
     // Leyenda de la vista M/S
     if (showSide)
     {
-        auto legend = juce::Rectangle<float> (plot.getRight() - 118.0f, plot.getY() + 6.0f, 118.0f, 14.0f);
-        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        const float k = Palette::big (1.0f, 1.35f);
+        auto legend = juce::Rectangle<float> (plot.getRight() - 118.0f * k, plot.getY() + 6.0f, 118.0f * k, 14.0f * k);
+        g.setFont (juce::FontOptions (Palette::fs (10.5f), juce::Font::bold));
         g.setColour (Palette::barNormal);
-        g.fillRect (legend.getX(), legend.getCentreY() - 4.0f, 8.0f, 8.0f);
-        g.drawText ("MID", legend.withTrimmedLeft (12.0f).withWidth (40.0f), juce::Justification::centredLeft);
+        g.fillRect (legend.getX(), legend.getCentreY() - 4.0f * k, 8.0f * k, 8.0f * k);
+        g.drawText ("MID", legend.withTrimmedLeft (12.0f * k).withWidth (40.0f * k), juce::Justification::centredLeft);
         g.setColour (Palette::side);
-        g.fillRect (legend.getX() + 56.0f, legend.getCentreY() - 4.0f, 8.0f, 8.0f);
-        g.drawText ("SIDE", legend.withTrimmedLeft (68.0f), juce::Justification::centredLeft);
+        g.fillRect (legend.getX() + 56.0f * k, legend.getCentreY() - 4.0f * k, 8.0f * k, 8.0f * k);
+        g.drawText ("SIDE", legend.withTrimmedLeft (68.0f * k), juce::Justification::centredLeft);
     }
 
     // Fase por banda: tira roja sobre el eje en las bandas que se cancelarian
@@ -720,9 +731,9 @@ void SpectrumView::paint (juce::Graphics& g)
     // Congelado: aviso en la esquina de la grafica
     if (frozen)
     {
-        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        g.setFont (juce::FontOptions (Palette::fs (10.5f), juce::Font::bold));
         g.setColour (Palette::barOver);
-        g.drawText ("FROZEN", juce::Rectangle<float> (plot.getX() + 8.0f, plot.getY() + 6.0f, 80.0f, 14.0f),
+        g.drawText ("FROZEN", juce::Rectangle<float> (plot.getX() + 8.0f, plot.getY() + 6.0f, 110.0f, labelH),
                     juce::Justification::centredLeft);
         g.setFont (juce::FontOptions (11.0f));
     }
@@ -855,10 +866,12 @@ void SpectrumView::drawHover (juce::Graphics& g, float tilt, float refDb, bool s
         lines.add ("(tilt " + juce::String (tilt, 1) + " dB/oct)");
 
     // Cuadro junto al cursor, siempre dentro de la grafica
-    g.setFont (juce::FontOptions (11.5f));
+    const float k = Palette::big (1.0f, 1.35f);
+    const float rowH = 15.0f * k;
+    g.setFont (juce::FontOptions (Palette::fs (11.5f)));
     const int rows = lines.size() + (refLine.isNotEmpty() ? 1 : 0) + (gapLine.isNotEmpty() ? 1 : 0)
                    + (verdict.isNotEmpty() ? 1 : 0) + (bandRisk ? 1 : 0);
-    const float w = (gapLine.isNotEmpty() || bandRisk) ? 212.0f : 150.0f, h = 8.0f + 15.0f * (float) rows;
+    const float w = ((gapLine.isNotEmpty() || bandRisk) ? 212.0f : 150.0f) * k, h = 8.0f + rowH * (float) rows;
     float bx = hoverPos->x + 14.0f, by = hoverPos->y + 14.0f;
     if (bx + w > plot.getRight()) bx = hoverPos->x - 14.0f - w;
     if (by + h > plot.getBottom()) by = hoverPos->y - 14.0f - h;
@@ -869,31 +882,31 @@ void SpectrumView::drawHover (juce::Graphics& g, float tilt, float refDb, bool s
     g.setColour (Palette::grid);
     g.drawRoundedRectangle (box, 4.0f, 1.0f);
 
-    auto row = box.reduced (8.0f, 4.0f).withHeight (15.0f);
+    auto row = box.reduced (8.0f, 4.0f).withHeight (rowH);
     for (int i = 0; i < lines.size(); ++i)
     {
         const bool isSide = lines[i].startsWith ("Side");
         g.setColour (i == 0 ? Palette::text : isSide ? Palette::side : lines[i].startsWith ("(") ? Palette::textDim : Palette::barOver);
         g.drawText (lines[i], row, juce::Justification::centredLeft);
-        row.translate (0.0f, 15.0f);
+        row.translate (0.0f, rowH);
     }
     if (gapLine.isNotEmpty())
     {
         g.setColour (Palette::text);
         g.drawText (gapLine, row, juce::Justification::centredLeft);
-        row.translate (0.0f, 15.0f);
+        row.translate (0.0f, rowH);
     }
     if (verdict.isNotEmpty())
     {
         g.setColour (verdictColour);
         g.drawText (verdict, row, juce::Justification::centredLeft);
-        row.translate (0.0f, 15.0f);
+        row.translate (0.0f, rowH);
     }
     if (bandRisk)
     {
         g.setColour (Palette::textDim);
         g.drawText ("Check: polarity, L/R delay, widener", row, juce::Justification::centredLeft);
-        row.translate (0.0f, 15.0f);
+        row.translate (0.0f, rowH);
     }
     if (refLine.isNotEmpty())
     {
@@ -990,7 +1003,8 @@ void SpectrumView::drawCurve (juce::Graphics& g, bool side, float tilt, float re
     // "+dB" una vez por cada zona que pasa la referencia, en su punto mas alto
     if (! side)
     {
-        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        g.setFont (juce::FontOptions (Palette::fs (10.5f), juce::Font::bold));
+        const float k = Palette::big (1.0f, 1.35f);
         float lastRight = -1.0e9f;
         int labels = 0;
         for (int i = 0; i < P::numCurvePoints && labels < 8; )
@@ -1005,7 +1019,7 @@ void SpectrumView::drawCurve (juce::Graphics& g, bool side, float tilt, float re
             const float amount = dbs[(size_t) best] - refDb;
             if (amount < 0.5f) continue;
             const auto p = pts[(size_t) best];
-            auto box = juce::Rectangle<float> (p.x - 20.0f, juce::jmax (plot.getY(), p.y - 17.0f), 40.0f, 13.0f);
+            auto box = juce::Rectangle<float> (p.x - 20.0f * k, juce::jmax (plot.getY(), p.y - 17.0f * k), 40.0f * k, 13.0f * k);
             if (box.getX() < lastRight + 2.0f) continue;
             g.setColour (Palette::barOver);
             g.drawText ("+" + juce::String (amount, 1), box, juce::Justification::centred);
@@ -1113,22 +1127,23 @@ void SpectrumView::drawReadouts (juce::Graphics& g)
     // Lecturas alineadas a la derecha: etiqueta tenue + valor.
     // Si la ventana es angosta se omite RMS (Peak y LUFS son los esenciales).
     auto area = readoutArea;
-    const bool roomForAll = area.getWidth() >= 300.0f;
+    const bool roomForAll = area.getWidth() >= Palette::big (300.0f, 400.0f);
 
     for (int i = 2; i >= 0; --i)
     {
         if (i == 1 && ! roomForAll)
             continue;
 
-        auto slot = area.removeFromRight (i == 2 ? 104.0f : 86.0f);
-        auto valueBox = slot.removeFromRight (46.0f);
+        const float k = Palette::big (1.0f, 1.35f);
+        auto slot = area.removeFromRight ((i == 2 ? 104.0f : 86.0f) * k);
+        auto valueBox = slot.removeFromRight (46.0f * k);
 
         g.setColour (Palette::text);
-        g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
+        g.setFont (juce::FontOptions (Palette::fs (14.0f), juce::Font::bold));
         g.drawText (items[i].value, valueBox, juce::Justification::centredRight);
 
         g.setColour (Palette::textDim);
-        g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        g.setFont (juce::FontOptions (Palette::fs (10.5f), juce::Font::bold));
         g.drawText (items[i].label, slot.withTrimmedRight (6.0f), juce::Justification::centredRight);
 
         area.removeFromRight (8.0f);
@@ -1231,7 +1246,7 @@ void SpectrumView::drawGuideStrip (juce::Graphics& g, float tilt, float refDb, b
         }
 
         g.setColour (over ? Palette::barOver : (isHovered ? Palette::text : Palette::textDim));
-        const auto font = juce::FontOptions (10.5f, over ? juce::Font::bold : juce::Font::plain);
+        const auto font = juce::FontOptions (Palette::fs (10.5f), over ? juce::Font::bold : juce::Font::plain);
         g.setFont (font);
         const auto textArea = r.reduced (3.0f, 0.0f);
         juce::String label (zone.name);
@@ -1255,15 +1270,17 @@ void SpectrumView::drawGuideStrip (juce::Graphics& g, float tilt, float refDb, b
             g.drawDashedLine (juce::Line<float> (x, strip.getBottom(), x, plot.getBottom() + 4.0f), dashes, 2, 1.0f);
 
         // Hz de los limites junto al eje
-        g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+        const juce::FontOptions hzFont (Palette::fs (10.0f), juce::Font::bold);
+        const float hzH = Palette::big (13.0f, 17.0f);
+        g.setFont (hzFont);
         g.setColour (Palette::text);
         for (float hz : { zone.lo, zone.hi })
         {
             const float x = xFor (hz);
-            auto box = juce::Rectangle<float> (x - 20.0f, plot.getBottom() - 16.0f, 40.0f, 13.0f)
+            auto box = juce::Rectangle<float> (x - 26.0f, plot.getBottom() - hzH - 3.0f, 52.0f, hzH)
                            .constrainedWithin (plot);
             g.setColour (Palette::background.withAlpha (0.85f));
-            g.fillRoundedRectangle (box.withSizeKeepingCentre (juce::GlyphArrangement::getStringWidth (juce::FontOptions (10.0f, juce::Font::bold), hzText (hz)) + 8.0f, 13.0f), 3.0f);
+            g.fillRoundedRectangle (box.withSizeKeepingCentre (juce::GlyphArrangement::getStringWidth (hzFont, hzText (hz)) + 8.0f, hzH), 3.0f);
             g.setColour (Palette::text);
             g.drawText (hzText (hz), box, juce::Justification::centred);
         }
@@ -1293,11 +1310,11 @@ void SpectrumView::drawGuideInfo (juce::Graphics& g, float tilt, float refDb, bo
                                  : juce::String (-over, 1) + " dB below ref",
                      over > 0.0f ? Palette::barOver : Palette::textDim, over > 0.0f });
 
-    const juce::FontOptions font (12.0f), bold (12.0f, juce::Font::bold);
+    const juce::FontOptions font (Palette::fs (12.0f)), bold (Palette::fs (12.0f), juce::Font::bold);
     float w = 0.0f;
     for (const auto& l : lines)
         w = juce::jmax (w, juce::GlyphArrangement::getStringWidth (l.bold ? bold : font, l.text));
-    const float lineH = 16.0f;
+    const float lineH = Palette::big (16.0f, 21.0f);
     auto box = juce::Rectangle<float> (0.0f, 0.0f, w + 20.0f, lineH * (float) lines.size() + 12.0f);
 
     // Al lado de la zona (nunca encima de sus barras): a la derecha si la

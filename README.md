@@ -45,6 +45,16 @@ Prefer to copy it yourself? Each release also has a `.zip` with the
 
 ![Master tab: integrated loudness, True Peak, PLR and what each streaming platform does with your level](docs/images/master.png)
 
+**New in 1.5**
+
+![Guide on a vocal track: zones named above the graph; hovering one shows its range, what it does and how far it is from the reference](docs/images/guide.png)
+
+![On a channel the Master tab becomes Loudness: no streaming table, headroom and dynamics for that element instead](docs/images/loudness-channel.png)
+
+![Redesigned settings menu: curve speed, range, peak hold, listen mode, colour themes and large readings](docs/images/settings-menu.png)
+
+![Graphite theme: neutral grey for long sessions, with the brand lilac only where it matters](docs/images/graphite.png)
+
 **New in 1.4**
 
 ![Hover readout on a frozen curve: the kick at 60.2 Hz, its musical note and how far it is from the reference](docs/images/spectrum-hover.png)
@@ -96,6 +106,12 @@ are planned.
   which frequencies are wide and which sit in the center.
 - Vertical range 60 / 72 / 84 dB, in the settings menu (gear next to the
   logo).
+- **Guide:** instrument zones above the graph (vocal, kick, bass / 808,
+  snare, guitar, keys, or the whole mix). Picked automatically from the
+  track name ("Lead Vox", "Kik", "808"...) or by hand. Hover a zone to see
+  its range, what it does, what happens if there is too much or too little,
+  and how far it is from the reference. A zone lights up when something in
+  it passes the reference.
 
 **Phase tab**
 - Goniometer with Auto scale or Level scale (the edge is 0 dBFS).
@@ -118,6 +134,11 @@ are planned.
   the master is over-compressed.
 - What Spotify, YouTube, Apple Music, Amazon / TIDAL and Deezer would do
   with your level.
+- **Knows where it is:** the DAW sends the track name (FL Studio does). On
+  the master you get the streaming table; on a channel or bus the tab is
+  called **Loudness** and shows what helps there instead (compare LUFS
+  between channels, keep headroom). Auto / Master / Channel buttons if you
+  need to override it.
 
 **Anywhere:**
 - **MONO / SIDE listen button** in the header: hold it to listen, release to
@@ -126,6 +147,11 @@ are planned.
   Link to controller). It never stays on: a project always opens in stereo,
   and exports are never affected.
 - A DC offset warning in the header.
+- Colour themes in the settings menu: **Blacklight**, **Graphite** (neutral,
+  for long sessions) and **Dim** (dark rooms), plus colour-blind safe alerts.
+  Your choice is shared by every Lyman you open.
+- **Large readings** mode for screen recording and teaching: bigger numbers
+  and labels that stay readable in a compressed video.
 
 The window is resizable and remembers its size and last open tab.
 
@@ -150,6 +176,17 @@ The window is resizable and remembers its size and last open tab.
 Everything below is planned for the **free** version. No dates: each release
 ships when it is tested in real mixes.
 
+**1.5 — released**
+
+- [x] Guide: instrument zones (vocal, kick, bass / 808, snare, guitar, keys,
+      mix), picked from the track name
+- [x] Master tab aware of the channel it is on (streaming table only on the
+      master; Loudness view on channels and buses)
+- [x] Large readings mode for screen recording and teaching
+- [x] Colour themes: Graphite (neutral), Dim and colour-blind safe alerts
+- [x] Redesigned settings menu and tooltips; listening warning that no longer
+      covers the graph
+
 **1.4 — released**
 
 - [x] Smoother, more detailed curve: averaged like SPAN, ~3 Hz resolution in the
@@ -160,15 +197,6 @@ ships when it is tested in real mixes.
       and Mid/Side verdict per frequency
 - [x] Mono / Side listen button (hold to listen; turns itself off on export)
 - [x] Per-band phase warning (red mark where a band would cancel in mono)
-
-**Next release (1.5) — in progress**
-
-- [ ] Instrument zones (e.g. voice: body, presence, sibilance, air)
-- [ ] Master tab aware of the channel it is on (streaming table only on the master)
-- [ ] Large readings mode for screen recording and teaching
-- [ ] Colour modes: neutral graphite (easy on the eyes in long sessions), dim
-      and colour-blind friendly
-- [ ] Redesigned settings menu and tooltips
 
 **Later**
 

@@ -122,6 +122,7 @@ namespace Palette
     {
         int  theme = blacklightTheme;
         bool colourBlind = false;
+        bool largeReadings = false;   // modo para grabar video / ensenar
     };
 
     // Archivo de ajustes (en Windows: %APPDATA%\Blacklight Spectrum Tools).
@@ -144,6 +145,7 @@ namespace Palette
             Settings loaded;
             loaded.theme       = juce::jlimit (0, 2, file.getIntValue ("theme", blacklightTheme));
             loaded.colourBlind = file.getBoolValue ("colourBlind", false);
+            loaded.largeReadings = file.getBoolValue ("largeReadings", false);
             return loaded;
         }();
         return s;
@@ -160,17 +162,37 @@ namespace Palette
         ++version();
     }
 
+    inline void save()
+    {
+        const auto& s = settings();
+        juce::PropertiesFile file (settingsOptions());
+        file.setValue ("theme", s.theme);
+        file.setValue ("colourBlind", s.colourBlind);
+        file.setValue ("largeReadings", s.largeReadings);
+        file.saveIfNeeded();
+    }
+
     // Llamar desde el hilo de la interfaz
     inline void setTheme (int theme, bool colourBlind)
     {
         auto& s = settings();
         s.theme       = juce::jlimit (0, 2, theme);
         s.colourBlind = colourBlind;
-        juce::PropertiesFile file (settingsOptions());
-        file.setValue ("theme", s.theme);
-        file.setValue ("colourBlind", s.colourBlind);
-        file.saveIfNeeded();
+        save();
         apply();
+    }
+
+    // Lecturas grandes: solo cambia el dibujo (textos y lineas mas grandes
+    // para que se lean en un video comprimido). El analisis es el mismo.
+    inline bool large() { return settings().largeReadings; }
+    inline float fs (float size) { return large() ? std::round (size * 1.35f * 2.0f) * 0.5f : size; }
+    inline float big (float normal, float largeValue) { return large() ? largeValue : normal; }
+
+    inline void setLargeReadings (bool on)
+    {
+        settings().largeReadings = on;
+        save();
+        ++version();      // las ventanas se reacomodan en su timer
     }
 
     // Se llama al abrir la primera ventana: carga el tema guardado

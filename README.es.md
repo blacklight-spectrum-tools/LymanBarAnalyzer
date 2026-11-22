@@ -46,6 +46,16 @@ Configuración de Windows → Aplicaciones.
 
 ![Pestaña Master: sonoridad integrada, True Peak, PLR y qué hace cada plataforma de streaming con tu nivel](docs/images/master.png)
 
+**Nuevo en la 1.5**
+
+![Guide en una pista de voz: zonas con nombre arriba de la gráfica; al pasar el mouse muestra su rango, qué hace y qué tan lejos está de la referencia](docs/images/guide.png)
+
+![En un canal la pestaña Master se vuelve Loudness: sin tabla de streaming, con margen y dinámica de ese elemento](docs/images/loudness-channel.png)
+
+![Menú de configuración rediseñado: velocidad de la curva, rango, peak hold, modo de escucha, temas de color y lecturas grandes](docs/images/settings-menu.png)
+
+![Tema Graphite: gris neutro para sesiones largas, con el lila de la marca solo donde importa](docs/images/graphite.png)
+
 **Nuevo en la 1.4**
 
 ![Lectura con el mouse sobre la curva congelada: el kick en 60.2 Hz, su nota musical y qué tan lejos está de la referencia](docs/images/spectrum-hover.png)
@@ -100,6 +110,12 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
   frecuencias están abiertas y cuáles en el centro.
 - Rango vertical de 60 / 72 / 84 dB, en el menú de configuración (engrane
   junto al logo).
+- **Guide:** zonas por instrumento arriba de la gráfica (voz, kick, bajo /
+  808, caja, guitarra, teclados o la mezcla completa). Se eligen solas por
+  el nombre de la pista ("Lead Vox", "Kik", "808"...) o a mano. Al pasar el
+  mouse por una zona ves su rango, qué hace, qué pasa si sobra o si falta,
+  y qué tan lejos está de la referencia. La zona se ilumina cuando algo
+  suyo pasa la referencia.
 
 **Pestaña Phase**
 - Goniómetro con escala Auto o Level (el borde es 0 dBFS).
@@ -122,6 +138,11 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
   Avisa cuando está sobrecomprimido.
 - Qué harían Spotify, YouTube, Apple Music, Amazon / TIDAL y Deezer con tu
   nivel.
+- **Sabe dónde está:** el DAW manda el nombre de la pista (FL Studio lo
+  hace). En el master ves la tabla de streaming; en un canal o bus la
+  pestaña se llama **Loudness** y muestra lo que sirve ahí (comparar LUFS
+  entre canales, dejar margen). Botones Auto / Master / Channel por si
+  quieres elegirlo a mano.
 
 **En cualquier pestaña:**
 - **Botón de escucha MONO / SIDE** en la cabecera: mantenlo presionado para
@@ -131,6 +152,11 @@ Probado hasta ahora en FL Studio. Están planeadas versiones para Pro Tools
   prendido: el proyecto siempre abre en estéreo y los exports no se
   afectan.
 - Aviso de DC offset en la cabecera.
+- Temas de color en el menú de configuración: **Blacklight**, **Graphite**
+  (neutro, para sesiones largas) y **Dim** (cuartos oscuros), más avisos
+  aptos para daltonismo. Tu elección la comparten todos los Lyman que abras.
+- Modo de **lecturas grandes** para grabar pantalla y dar clases: números y
+  etiquetas más grandes que se leen en un video comprimido.
 
 La ventana se puede redimensionar y recuerda su tamaño y la última pestaña
 abierta.
@@ -157,6 +183,17 @@ abierta.
 Todo lo de esta lista es para la versión **gratuita**. Sin fechas: cada
 versión sale cuando está probada en mezclas reales.
 
+**1.5 — publicada**
+
+- [x] Guide: zonas por instrumento (voz, kick, bajo / 808, caja, guitarra,
+      teclados, mezcla), elegidas por el nombre de la pista
+- [x] Pestaña Master que sabe en qué canal está (tabla de streaming solo en
+      el master; vista Loudness en canales y buses)
+- [x] Modo de lecturas grandes para grabar pantalla y dar clases
+- [x] Temas de color: Graphite (neutro), Dim y avisos para daltonismo
+- [x] Menú de configuración y textos de ayuda rediseñados; aviso de escucha
+      que ya no tapa la gráfica
+
 **1.4 — publicada**
 
 - [x] Curva más estable y con más detalle: promediada como SPAN, resolución de
@@ -170,17 +207,6 @@ versión sale cuando está probada en mezclas reales.
       al exportar)
 - [x] Aviso de fase por banda (marca roja donde una banda se cancelaría en
       mono)
-
-**Próxima versión (1.5) — en curso**
-
-- [ ] Zonas por instrumento (por ejemplo voz: cuerpo, presencia, sibilancia,
-      aire)
-- [ ] Pestaña Master que sabe en qué canal está (tabla de streaming solo en el
-      master)
-- [ ] Modo de lecturas grandes para grabar pantalla y dar clases
-- [ ] Modos de color: grafito neutro (descansa la vista en sesiones largas),
-      atenuado y para daltonismo
-- [ ] Menú de configuración y textos de ayuda rediseñados
 
 **Más adelante**
 
